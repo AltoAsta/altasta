@@ -1,0 +1,17 @@
+{
+  "name": "ALTO & ASTA Manager",
+  "short_name": "ALTO & ASTA",
+  "description": "Gestione allenamenti per salto in alto e salto con l'asta: programmazione, sedute, check-in e analisi del carico.",
+  "lang": "it",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f8fb",
+  "theme_color": "#0d3b66",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
