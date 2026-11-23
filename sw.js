@@ -3,9 +3,9 @@
    - navigazione: rete prima, cache come riserva (gli aggiornamenti arrivano subito)
    - niente intercettazione delle chiamate a Supabase (altro dominio)
 */
-const CACHE = 'altasta-shell-v1';
+const CACHE = 'altasta-shell-v2';
 const SHELL = [
-  './index.html',
+  './ALTO-ASTA-Manager.html',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png'
@@ -42,7 +42,7 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE).then(c => c.put(req, copia));
           return res;
         })
-        .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
+        .catch(() => caches.match(req).then(hit => hit || caches.match('./ALTO-ASTA-Manager.html')))
     );
     return;
   }

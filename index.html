@@ -290,6 +290,10 @@
       <div id="cloudPanel" style="display:none; margin-top:12px; text-align:left;">
         <p class="hint" id="cloudStato" style="margin-top:0;"></p>
         <div class="form-group"><label>URL del progetto</label><input id="cloudUrl" placeholder="https://xxxx.supabase.co"></div>
+        <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="cloudTabelle" style="width:auto;">
+          <label for="cloudTabelle" style="margin:0; font-weight:500;">Usa tabelle normalizzate (dopo aver eseguito supabase-tabelle.sql)</label>
+        </div>
         <div class="form-group"><label>Chiave pubblica (anon)</label><input id="cloudKey" placeholder="eyJhbGciOi... oppure sb_publishable_..."></div>
         <p class="hint" style="margin-top:-4px;">La trovi in Supabase: <b>Project Settings → API</b> (o <b>API Keys</b>). Copia la chiave <b>anon / public</b>; se vedi solo le chiavi nuove, apri <b>Legacy API keys</b>. <b>Mai</b> la <code>service_role</code> / <code>secret</code>: è come dare la password dell'archivio a chiunque apra l'app.</p>
         <button class="btn-action" id="btnCloudSalva" style="font-size:14px; padding:9px;">Salva configurazione</button>
@@ -318,7 +322,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v69</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v70</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1698,7 +1702,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '69';
+const VERSIONE = '70';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -1838,7 +1842,8 @@ function statoSistema(){
 
   return [
     { nome: 'Versione app', valore: 'v' + VERSIONE, ok: true },
-    { nome: 'Cloud', valore: cloudAttivo() ? 'configurato' : 'solo locale', ok: cloudAttivo() },
+    { nome: 'Cloud', valore: cloudAttivo() ? (cloudCfg().tabelle ? 'tabelle normalizzate' : 'documento JSON') : 'solo locale', ok: cloudAttivo() },
+    { nome: 'Tabelle attive', valore: Cloud.tabelleAttive ? 'sì' : (cloudCfg().tabelle ? 'da verificare' : 'no'), ok: !!Cloud.tabelleAttive || !cloudCfg().tabelle },
     { nome: 'Sessione cloud', valore: Cloud.coachId ? 'attiva' : 'assente', ok: !!Cloud.coachId },
     { nome: 'Installata come app', valore: standalone ? 'sì' : 'no — apri dal link https', ok: standalone },
     { nome: 'Funziona offline', valore: sw ? 'sì' : 'no — service worker non attivo', ok: sw },
@@ -6237,6 +6242,26 @@ async function cloudCaricaDati(){
     return (Array.isArray(righe) && righe[0]) ? righe[0].data : null;
   }
   if(!Cloud.coachId) return null;
+
+  if(cloudCfg().tabelle){
+    try{
+      const dati = await cloudRichiesta('POST', '/rest/v1/rpc/coach_load', {});
+      Cloud.tabelleAttive = true;
+      if(dati === null) return null;
+      if(dati && typeof dati === 'object'){
+        const vuoto = !(dati.athletes || []).length && !(dati.sessions || []).length && !(dati.models || []).length;
+        if(vuoto){
+          const vecchio = await cloudRichiesta('GET', '/rest/v1/coach_data?select=data&coach_id=eq.' + Cloud.coachId);
+          if(Array.isArray(vecchio) && vecchio[0] && vecchio[0].data) return vecchio[0].data;
+        }
+      }
+      return dati;
+    }catch(e){
+      Cloud.tabelleAttive = false;
+      console.warn('Tabelle normalizzate non disponibili, uso il documento JSON:', e.message);
+    }
+  }
+
   const righe = await cloudRichiesta('GET', '/rest/v1/coach_data?select=data&coach_id=eq.' + Cloud.coachId);
   return (Array.isArray(righe) && righe[0]) ? righe[0].data : null;
 }
@@ -6250,6 +6275,18 @@ async function cloudSalvaDati(dati){
     return;
   }
   if(!Cloud.coachId) return;
+
+  if(cloudCfg().tabelle){
+    try{
+      await cloudRichiesta('POST', '/rest/v1/rpc/coach_save', { p_data: dati });
+      Cloud.tabelleAttive = true;
+      return;
+    }catch(e){
+      Cloud.tabelleAttive = false;
+      console.warn('Salvataggio su tabelle non riuscito, uso il documento JSON:', e.message);
+    }
+  }
+
   await cloudRichiesta('POST', '/rest/v1/coach_data?on_conflict=coach_id',
     { coach_id: Cloud.coachId, data: dati, updated_at: new Date().toISOString() },
     { headers: { 'Prefer': 'resolution=merge-duplicates' } });
@@ -6731,6 +6768,8 @@ function aggiornaPannelloCloud(){
 
   if(url) url.value = cfg.url || '';
   if(key) key.value = cfg.key || '';
+  const tabelle = document.getElementById('cloudTabelle');
+  if(tabelle) tabelle.checked = !!cfg.tabelle;
   if(stato) stato.textContent = cloudAttivo()
     ? 'Cloud attivo: ' + String(cfg.url || '').replace('https://', '')
     : 'Nessun cloud configurato: l\'app funziona in locale su questo PC.';
@@ -6773,7 +6812,8 @@ document.getElementById('btnCloudSalva').onclick = () => {
   const url = document.getElementById('cloudUrl').value.trim();
   const key = document.getElementById('cloudKey').value.trim();
   if(!url || !key){ alert('Servono URL del progetto e chiave pubblica (anon).'); return; }
-  setCloudCfg({ url: url, key: key });
+  const tabelle = document.getElementById('cloudTabelle');
+  setCloudCfg({ url: url, key: key, tabelle: !!(tabelle && tabelle.checked) });
   aggiornaPannelloCloud();
   aggiornaFormAtletaCloud();
   alert('Configurazione salvata. Ora accedi con l\'email dell\'account Supabase (oppure registrati).');
