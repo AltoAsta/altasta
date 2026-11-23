@@ -322,7 +322,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v70</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v71</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1340,6 +1340,40 @@ function loadAthletesForLogin() {
   } catch(e) {}
 }
 
+function dbDaAccessoAtleta(dati){
+  return normalizzaDati({
+    athletes: [dati.atleta],
+    models: dati.modelli || [],
+    sessions: dati.sedute || [],
+    comps: dati.comps || [],
+    tests: dati.tests || [],
+    checkins: dati.checkins || [],
+    calendario: dati.calendario || [],
+    commenti: dati.commenti || [],
+    blockTypes: dati.blockTypes || []
+  });
+}
+
+let ultimoAggiornamentoAtleta = 0;
+
+async function aggiornaDatiAtleta(forza){
+  if(!(cloudAttivo() && cloudAtleta)) return false;
+  if(!credenzialiAtleta || !credenzialiAtleta.codice) return false;
+  const adesso = Date.now();
+  if(!forza && (adesso - ultimoAggiornamentoAtleta) < 30000) return false;
+  try{
+    const dati = await cloudAtletaAccesso(credenzialiAtleta.codice, credenzialiAtleta.pin);
+    if(!dati || !dati.atleta) return false;
+    db = dbDaAccessoAtleta(dati);
+    currentAthleteId = dati.atleta.id;
+    ultimoAggiornamentoAtleta = Date.now();
+    renderAll();
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
 async function doAthleteLogin() {
   if(cloudAttivo()){
     const err = document.getElementById('athleteLoginError');
@@ -1350,13 +1384,7 @@ async function doAthleteLogin() {
     try{
       const dati = await cloudAtletaAccesso(codice, pin);
       if(!dati || !dati.atleta){ err.innerText = 'Codice o PIN non validi.'; return; }
-      db = normalizzaDati({
-        athletes: [dati.atleta], models: dati.modelli || [],
-        sessions: dati.sedute || [], comps: dati.comps || [], tests: dati.tests || [],
-        checkins: dati.checkins || [],
-        calendario: dati.calendario || [],
-        blockTypes: dati.blockTypes || []
-      });
+      db = dbDaAccessoAtleta(dati);
       currentUserId = dati.coach_id;
       currentAthleteId = dati.atleta.id;
       isAthleteMode = true;
@@ -1702,7 +1730,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '70';
+const VERSIONE = '71';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -3070,7 +3098,8 @@ function renderCommenti(sessioneId){
   if(box.scrollHeight) box.scrollTop = box.scrollHeight;
 }
 
-function apriCommenti(sessioneId){
+async function apriCommenti(sessioneId){
+  if(isAthleteMode) await aggiornaDatiAtleta(true);
   const s = sessionePerCommenti(sessioneId);
   commentiSessioneCorrente = sessioneId;
   const modal = document.getElementById('modalCommenti');
@@ -3097,7 +3126,8 @@ function chiudiCommenti(){
   commentiSessioneCorrente = null;
 }
 
-function apriMessaggi(){
+async function apriMessaggi(){
+  if(isAthleteMode) await aggiornaDatiAtleta(true);
   const modal = document.getElementById('modalMessaggi');
   const box = document.getElementById('messaggiLista');
   if(!modal || !box) return;
@@ -6236,6 +6266,22 @@ async function cloudClubInfo(){
   }catch(e){ console.warn('Società non letta:', e.message); }
 }
 
+async function ricaricaDatiCloudSeCambiati(){
+  if(!cloudAttivo() || !Cloud.coachId || cloudAtleta) return false;
+  if(cloudTimer) return false;            // salvataggio in coda: non sovrascrivere
+  try{
+    const dati = await cloudCaricaDati();
+    if(!dati) return false;
+    const nuovo = JSON.stringify(dati);
+    if(nuovo === JSON.stringify(db)) return false;
+    db = normalizzaDati(dati);
+    renderAll();
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
 async function cloudCaricaDati(){
   if(Cloud.clubId){
     const righe = await cloudRichiesta('GET', '/rest/v1/club_data?select=data&club_id=eq.' + Cloud.clubId);
@@ -8120,8 +8166,16 @@ document.getElementById('btnTema').onclick = cambiaTema;
 document.getElementById('btnPromemoria').onclick = scaricaPromemoria;
 applicaTema(); applicaIconeTab(); aggiornaBarraRete(); registraServiceWorker();
 if(typeof window !== 'undefined' && window.addEventListener){
-  window.addEventListener('online', () => { aggiornaBarraRete(); inviaCodaCheckin(); });
+  window.addEventListener('online', () => { aggiornaBarraRete(); inviaCodaCheckin(); aggiornaDatiAtleta(true); });
   window.addEventListener('offline', aggiornaBarraRete);
+  if(document.addEventListener){
+    document.addEventListener('visibilitychange', () => {
+      if(document.visibilityState !== 'visible') return;
+      if(isAthleteMode){ aggiornaDatiAtleta(false); return; }
+      if(cloudAttivo() && Cloud.coachId && !editingSessionId && !cloudAtleta){ ricaricaDatiCloudSeCambiati(); }
+    });
+  }
+  if(typeof setInterval === 'function') setInterval(() => { if(isAthleteMode) aggiornaDatiAtleta(false); }, 120000);
 }
 
 mBlocchi = []; sBlocchi = [];
