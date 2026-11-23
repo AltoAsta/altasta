@@ -318,7 +318,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v67</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v69</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1025,6 +1025,17 @@
 
     <section id="view-dati">
       <div class="card">
+        <h2>🩺 Stato del sistema</h2>
+        <p class="hint">Controllo rapido di app, cloud, offline e sicurezza dei dati.</p>
+        <div id="statoSistema" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));"></div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">
+          <button class="small" id="btnSnapOra" style="background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3;">📸 Crea istantanea</button>
+          <button class="small" id="btnSnapRipristina" style="background:#fff3cd; color:#856404; border:1px solid #f0d58c;">↩︎ Ripristina ultima istantanea</button>
+        </div>
+        <div id="snapshotLista" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
         <h2>📥 Importa da CSV</h2>
         <p class="hint">Porta dentro gare e sedute senza reinserirle a mano. Le colonne si riconoscono dal nome (Data, Atleta, Disciplina…); l'atleta viene abbinato per cognome e nome.</p>
 
@@ -1441,17 +1452,32 @@ function applicaIconeTab(){
   });
 }
 
-function temaAttuale(){ return localStorage.getItem('altasta_tema') === 'scuro' ? 'scuro' : 'chiaro'; }
+function temaAttuale(){
+  const v = localStorage.getItem('altasta_tema');
+  return (v === 'scuro' || v === 'auto') ? v : 'chiaro';
+}
+
+function temaEffettivo(){
+  const t = temaAttuale();
+  if(t !== 'auto') return t;
+  const ora = new Date().getHours();
+  return (ora >= 19 || ora < 7) ? 'scuro' : 'chiaro';
+}
 
 function applicaTema(){
-  const t = temaAttuale();
+  const t = temaEffettivo();
   if(document.body && document.body.setAttribute) document.body.setAttribute('data-tema', t);
   const b = document.getElementById('btnTema');
-  if(b) b.textContent = (t === 'scuro') ? '☀️' : '🌙';
+  if(b){
+    const scelto = temaAttuale();
+    b.textContent = scelto === 'auto' ? '🌗' : (t === 'scuro' ? '☀️' : '🌙');
+    b.title = scelto === 'auto' ? 'Tema automatico (scuro dopo le 19)' : (t === 'scuro' ? 'Passa al tema chiaro' : 'Passa al tema scuro');
+  }
 }
 
 function cambiaTema(){
-  localStorage.setItem('altasta_tema', temaAttuale() === 'scuro' ? 'chiaro' : 'scuro');
+  const ciclo = { chiaro: 'scuro', scuro: 'auto', auto: 'chiaro' };
+  localStorage.setItem('altasta_tema', ciclo[temaAttuale()] || 'chiaro');
   applicaTema();
 }
 
@@ -1672,7 +1698,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '67';
+const VERSIONE = '69';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -1756,10 +1782,87 @@ function normalizzaBlocco(b){
   return b;
 }
 
+/* ===== istantanee automatiche (rollback locale) ===== */
+const SNAP_KEY = 'altasta_snapshots';
+
+function elencoSnapshot(){
+  try{
+    const v = JSON.parse(localStorage.getItem(SNAP_KEY) || '[]');
+    return Array.isArray(v) ? v : [];
+  }catch(e){ return []; }
+}
+
+function creaSnapshot(forza){
+  try{
+    const lista = elencoSnapshot();
+    const ultimo = lista.length ? lista[lista.length - 1].ts : 0;
+    if(!forza && (Date.now() - ultimo) < 30 * 60 * 1000) return null;
+    const testo = JSON.stringify(db);
+    if(testo.length > 3.5 * 1024 * 1024) return null;
+    lista.push({ ts: Date.now(), dati: db });
+    while(lista.length > 3) lista.shift();
+    localStorage.setItem(SNAP_KEY, JSON.stringify(lista));
+    return lista[lista.length - 1];
+  }catch(e){ return null; }
+}
+
+function ripristinaSnapshot(ts){
+  const lista = elencoSnapshot();
+  const scelto = ts ? lista.filter(x => x.ts === ts)[0] : lista[lista.length - 1];
+  if(!scelto){ alert('Nessuna istantanea disponibile.'); return false; }
+  const quando = new Date(scelto.ts).toLocaleString('it-IT');
+  if(!confirm('Ripristinare i dati al ' + quando + '? Le modifiche successive andranno perse.')) return false;
+  creaSnapshot(true);
+  db = normalizzaDati(JSON.parse(JSON.stringify(scelto.dati)));
+  saveData(); renderAll();
+  alert('Dati ripristinati al ' + quando + '.');
+  return true;
+}
+
+function renderSnapshot(){
+  const box = document.getElementById('snapshotLista');
+  if(!box) return;
+  const lista = elencoSnapshot();
+  if(!lista.length){ box.innerHTML = '<p class="hint" style="margin:0;">Nessuna istantanea ancora: ne viene creata una automaticamente ogni 30 minuti di lavoro.</p>'; return; }
+  box.innerHTML = '<div style="font-size:12px; color:#7b8794; font-weight:700; margin-bottom:4px;">ISTANTANEE DISPONIBILI</div>' +
+    lista.slice().reverse().map((x, i) => '<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid var(--bordo); border-radius:8px; padding:6px 10px; margin-bottom:6px;">' +
+      '<span style="font-size:12px;">' + esc(new Date(x.ts).toLocaleString('it-IT')) + '</span>' +
+      '<button class="small" data-snapshot="' + x.ts + '" style="margin:0;">Ripristina</button></div>').join('');
+}
+
+function statoSistema(){
+  const kb = (() => { try{ return Math.round(JSON.stringify(db).length / 1024); }catch(e){ return 0; } })();
+  const standalone = (typeof matchMedia !== 'undefined') ? matchMedia('(display-mode: standalone)').matches : false;
+  const sw = !!(typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller);
+  const backup = lastBackupDate ? new Date(+lastBackupDate).toLocaleDateString('it-IT') : 'mai';
+
+  return [
+    { nome: 'Versione app', valore: 'v' + VERSIONE, ok: true },
+    { nome: 'Cloud', valore: cloudAttivo() ? 'configurato' : 'solo locale', ok: cloudAttivo() },
+    { nome: 'Sessione cloud', valore: Cloud.coachId ? 'attiva' : 'assente', ok: !!Cloud.coachId },
+    { nome: 'Installata come app', valore: standalone ? 'sì' : 'no — apri dal link https', ok: standalone },
+    { nome: 'Funziona offline', valore: sw ? 'sì' : 'no — service worker non attivo', ok: sw },
+    { nome: 'Dati in locale', valore: kb + ' KB · ' + ((db.athletes || []).length) + ' atleti · ' + ((db.sessions || []).length) + ' sedute', ok: kb < 4000 },
+    { nome: 'Ultimo backup', valore: backup, ok: !!lastBackupDate && (Date.now() - +lastBackupDate) < 30 * 86400000 },
+    { nome: 'Istantanee', valore: elencoSnapshot().length + ' disponibili', ok: true }
+  ];
+}
+
+function renderStatoSistema(){
+  const box = document.getElementById('statoSistema');
+  if(!box) return;
+  box.innerHTML = statoSistema().map(x =>
+    '<div class="stat" style="flex-direction:row; align-items:center; gap:8px; padding:8px 10px;">' +
+      '<span style="font-size:15px;">' + (x.ok ? '✅' : '⚠️') + '</span>' +
+      '<span style="flex:1;"><span>' + esc(x.nome) + '</span><b style="font-size:12px; font-weight:600; color:var(--testo-2);">' + esc(x.valore) + '</b></span>' +
+    '</div>').join('');
+}
+
 function saveData(){
   if(cloudAtleta) return;   // atleta in cloud: sola lettura
   const dataKey = 'altasta_data_v6_' + currentUserId;
   try{ localStorage.setItem(dataKey, JSON.stringify(db)); }catch(e){}
+  try{ creaSnapshot(false); }catch(e){}
   cloudSalvaDeferito();
 }
 
@@ -4178,7 +4281,7 @@ function renderAll(){
   fillMultiSelect(document.getElementById('assignAtleti'), true); fillModelSelect(document.getElementById('assignModelSelect'));
   renderAssigned(); renderSedute(); renderGare(); renderTests(); renderStats(); renderAnalisiAltezze();
   renderStorico(); renderAnalisi(); renderCondivisioni(); renderClub();
-  renderCalendario(); renderPeriodizzazione(); renderAudit(); renderCalendarioAtleta(); renderEserciziCustomUI(); renderCheckinSquadra(); renderDashboard(); aggiornaBadgeMessaggi();
+  renderCalendario(); renderPeriodizzazione(); renderAudit(); renderCalendarioAtleta(); renderEserciziCustomUI(); renderCheckinSquadra(); renderDashboard(); aggiornaBadgeMessaggi(); renderStatoSistema(); renderSnapshot();
   applicaVistaAtleta();
 }
 
@@ -4833,6 +4936,21 @@ function anteprimaImportModelli(esito){
     box.innerHTML = '<p class="hint">' + n + ' modelli importati. Li trovi qui sotto.</p>';
   };
 }
+
+document.getElementById('btnSnapOra').onclick = () => {
+  const snap = creaSnapshot(true);
+  if(snap){ renderSnapshot(); renderStatoSistema(); alert('Istantanea creata.'); }
+  else alert('Non riesco a creare l\'istantanea (spazio esaurito?).');
+};
+
+document.getElementById('btnSnapRipristina').onclick = () => ripristinaSnapshot();
+
+document.body.addEventListener('click', e => {
+  const t = e.target;
+  if(t && t.dataset && t.dataset.snapshot){
+    ripristinaSnapshot(+t.dataset.snapshot);
+  }
+});
 
 document.getElementById('btnEsportaModelli').onclick = esportaTuttiModelli;
 document.getElementById('btnImportaModelli').onclick = () => document.getElementById('fileModelli').click();
@@ -7402,6 +7520,65 @@ document.getElementById('btnModelloSedute').onclick = () => {
   scaricaCsv('modello-sedute.csv', esempio);
 };
 
+/* ===== previsto vs svolto ===== */
+function serieCaricoSettimane(settimane, atletaId){
+  const n = settimane || 6;
+  const lun = lunediDi(new Date());
+  const out = [];
+  const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const caricoBlocchi = x => (x.blocchi || []).reduce((t, b) => t + (+b.durata || 0) * (+b.rpe || 0), 0);
+
+  for(let i = n - 1; i >= 0; i--){
+    const inizio = new Date(lun.getFullYear(), lun.getMonth(), lun.getDate() - 7 * i);
+    const fine = new Date(inizio.getFullYear(), inizio.getMonth(), inizio.getDate() + 7);
+    const dentro = d => { const x = dataLocale(d); return x >= inizio && x < fine; };
+    const filtro = x => (!atletaId || x.atletaId === atletaId);
+
+    const previsto = (db.sessions || [])
+      .filter(x => x.stato === 'pianificata' && filtro(x) && dentro(x.data))
+      .reduce((t, x) => t + caricoBlocchi(x), 0);
+
+    const svolto = (db.sessions || [])
+      .filter(x => x.stato !== 'pianificata' && filtro(x) && dentro(x.data))
+      .reduce((t, x) => t + caricoBlocchi(x) * quotaSessione(x), 0);
+
+    out.push({ inizio: iso(inizio), previsto: Math.round(previsto), svolto: Math.round(svolto) });
+  }
+  return out;
+}
+
+function graficoPrevistoSvolto(serie, larghezza, altezza){
+  const w = larghezza || 620, h = altezza || 190;
+  const serieOk = serie || [];
+  const max = Math.max(1, Math.max.apply(null, serieOk.map(x => Math.max(x.previsto, x.svolto))));
+  const base = h - 28;
+  const colonne = Math.max(1, serieOk.length);
+  const passo = (w - 50) / colonne;
+  const larg = Math.min(26, passo / 3);
+
+  const barre = serieOk.map((x, i) => {
+    const x0 = 40 + i * passo + passo / 2;
+    const hPrev = Math.round((x.previsto / max) * (base - 20));
+    const hSvol = Math.round((x.svolto / max) * (base - 20));
+    const etichetta = x.inizio.slice(8) + '/' + x.inizio.slice(5, 7);
+    return '<rect x="' + (x0 - larg - 2) + '" y="' + (base - hPrev) + '" width="' + larg + '" height="' + hPrev + '" fill="#b9cde4" rx="3"></rect>' +
+      '<rect x="' + (x0 + 2) + '" y="' + (base - hSvol) + '" width="' + larg + '" height="' + hSvol + '" fill="#2a9d8f" rx="3"></rect>' +
+      '<text x="' + x0 + '" y="' + (base + 14) + '" text-anchor="middle" font-size="10" fill="#7b8794">' + esc(etichetta) + '</text>';
+  }).join('');
+
+  const griglia = [0, 0.5, 1].map(f => {
+    const y = base - Math.round(f * (base - 20));
+    return '<line x1="36" y1="' + y + '" x2="' + (w - 10) + '" y2="' + y + '" stroke="#eef2f6" stroke-width="1"></line>' +
+      '<text x="32" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="#9aa7b4">' + Math.round(max * f) + '</text>';
+  }).join('');
+
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="' + h + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Carico previsto e svolto">' +
+    griglia + barre +
+    '<rect x="' + (w - 150) + '" y="6" width="10" height="10" fill="#b9cde4" rx="2"></rect><text x="' + (w - 135) + '" y="15" font-size="10" fill="#52606d">previsto</text>' +
+    '<rect x="' + (w - 82) + '" y="6" width="10" height="10" fill="#2a9d8f" rx="2"></rect><text x="' + (w - 67) + '" y="15" font-size="10" fill="#52606d">svolto</text>' +
+    '</svg>';
+}
+
 function renderDashboard(){
   const box = document.getElementById('dashboardAllenatore');
   if(!box) return;
@@ -7486,6 +7663,10 @@ function renderDashboard(){
     '</div>' +
     '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">' +
       kpi.map(k => '<div class="stat" style="padding:12px 14px;"><span>' + esc(k.l) + '</span><b style="font-size:22px;">' + esc(String(k.v)) + '</b></div>').join('') +
+    '</div>' +
+    '<div class="card" style="margin-top:14px;">' +
+      '<h2 style="font-size:14px;">📈 Carico previsto vs svolto (6 settimane)</h2>' +
+      graficoPrevistoSvolto(serieCaricoSettimane(6, null)) +
     '</div>' +
     '<div class="row" style="margin-top:14px; align-items:stretch;">' +
       '<div class="card" style="flex:1.15; min-width:300px; margin:0;">' +
