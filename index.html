@@ -121,7 +121,7 @@
   .block-type-tag .del-tag { cursor:pointer; margin-left:8px; color:#c0392b; font-weight:bold; }
   .block-type-tag .del-tag:hover { color:#e74c3c; }
 
-  .summary-box { background:#f0f8ff; border:1px solid #cce5ff; border-radius:8px; padding:12px; margin-top:15px; font-size:14px; color:#004085; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .summary-box { display:flex; flex-wrap:wrap; gap:8px 16px; background:#f0f8ff; border:1px solid #cce5ff; border-radius:8px; padding:12px; margin-top:15px; font-size:14px; color:#004085; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
   .summary-box b { color:#002752; }
 
   /* ===== Rivestimento grafico (v52) ===== */
@@ -215,6 +215,68 @@
     nav{padding:6px 12px}
     .card{padding:14px;border-radius:14px}
     .row>div{min-width:110px}
+  }
+
+  /* ===== Adattamento al telefono ===== */
+  @media (max-width: 820px){
+    main{padding:12px}
+    header{padding:10px 12px; flex-wrap:wrap; row-gap:6px}
+    header h1{font-size:15px; line-height:1.25; flex:1 1 auto}
+    header .user-info{flex-wrap:wrap; row-gap:6px}
+    .summary-box{display:flex; flex-wrap:wrap; gap:8px 14px}
+    header .user-info{gap:8px; font-size:13px}
+
+    nav{padding:6px 10px; gap:3px}
+    nav button{padding:7px 10px; font-size:12.5px}
+    .tab-ico svg{width:14px; height:14px}
+
+    .card{padding:13px; border-radius:13px; overflow-x:auto; -webkit-overflow-scrolling:touch}
+    .card h2{font-size:15px}
+
+    /* le righe diventano colonne: niente più campi schiacciati */
+    .row{flex-direction:column; align-items:stretch; gap:8px}
+    .row > div{flex:1 1 auto; min-width:0 !important; width:100%}
+
+    /* le griglie vanno a una colonna, tranne i riquadri numerici */
+    .grid{grid-template-columns:1fr !important}
+    .grid-atleti{grid-template-columns:1fr !important}
+    #statoSistema, #aiKpi, .kpi-grid{grid-template-columns:repeat(2, minmax(0,1fr)) !important}
+
+    /* tabelle: scorrono dentro la card, la pagina resta ferma */
+    table{min-width:560px; font-size:12.5px}
+    th,td{padding:7px 6px}
+    th{font-size:10px}
+    .tablewrap{overflow-x:auto; -webkit-overflow-scrolling:touch}
+
+    /* blocchi allenamento: due campi per riga, il resto a piena larghezza */
+    .blocco-row{gap:6px; padding:8px}
+    .blocco-field{flex:1 1 calc(50% - 6px) !important; min-width:0 !important}
+    .blocco-field.field-focus, .blocco-field.field-type{flex:1 1 100% !important}
+    .blocco-row .del{flex:0 0 auto; margin-left:auto}
+
+    /* 16px sugli input: evita lo zoom automatico di iOS */
+    input, select, textarea{font-size:16px}
+    .blocco-field input, .blocco-field select, .blocco-field textarea{font-size:14px}
+
+    .stat b{font-size:15px}
+    .stat span{font-size:10px}
+
+    .modal-scuro{padding:14px !important; max-height:92vh !important}
+    .ck-v{width:40px; height:40px}
+    .ck-lab{min-width:86px; font-size:12.5px}
+
+    #btnTema, #btnMessaggi{padding:4px 7px; font-size:13px}
+    .chip-atleta{padding:6px 11px; font-size:12.5px}
+  }
+
+  @media (max-width: 460px){
+    main{padding:9px}
+    .card{padding:11px}
+    table{min-width:480px}
+    .grid-atleti{grid-template-columns:1fr !important}
+    .blocco-field{flex:1 1 100% !important}
+    .stat{flex-direction:column; align-items:flex-start}
+    header h1{font-size:14px}
   }
 </style>
 </head>
@@ -322,7 +384,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v72</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v73</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1731,7 +1793,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '72';
+const VERSIONE = '73';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
