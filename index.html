@@ -290,7 +290,8 @@
       <div id="cloudPanel" style="display:none; margin-top:12px; text-align:left;">
         <p class="hint" id="cloudStato" style="margin-top:0;"></p>
         <div class="form-group"><label>URL del progetto</label><input id="cloudUrl" placeholder="https://xxxx.supabase.co"></div>
-        <div class="form-group"><label>Chiave pubblica (anon)</label><input id="cloudKey" placeholder="eyJhbGciOi..."></div>
+        <div class="form-group"><label>Chiave pubblica (anon)</label><input id="cloudKey" placeholder="eyJhbGciOi... oppure sb_publishable_..."></div>
+        <p class="hint" style="margin-top:-4px;">La trovi in Supabase: <b>Project Settings → API</b> (o <b>API Keys</b>). Copia la chiave <b>anon / public</b>; se vedi solo le chiavi nuove, apri <b>Legacy API keys</b>. <b>Mai</b> la <code>service_role</code> / <code>secret</code>: è come dare la password dell'archivio a chiunque apra l'app.</p>
         <button class="btn-action" id="btnCloudSalva" style="font-size:14px; padding:9px;">Salva configurazione</button>
         <button class="btn-action" id="btnCloudReset" style="font-size:12px; padding:7px; background:#e3e9f0; color:#52606d; margin-top:6px;">Rimuovi cloud</button>
         <p class="hint" id="cloudLoginNota"></p>
@@ -317,10 +318,11 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v59</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v63</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
+      <button id="btnMessaggi" title="Messaggi sulle sedute" style="position:relative; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:8px; padding:5px 9px; cursor:pointer;">💬<span id="msgCount" style="display:none; position:absolute; top:-6px; right:-6px; background:#e76f51; color:#fff; border-radius:999px; font-size:10px; font-weight:700; padding:1px 5px;">0</span></button>
       <span id="syncStato" title="Stato del salvataggio" style="font-size:12px; opacity:.95;">💾 Locale</span>
       <button id="btnSyncRiprova" style="display:none;">Riprova</button>
       <button onclick="doLogout()">Logout</button>
@@ -340,6 +342,29 @@
     <button class="tab" data-view="stats">Statistiche</button>
     <button class="tab" data-view="dati">Dati</button>
   </nav>
+
+  <div id="modalCommenti" style="display:none; position:fixed; inset:0; background:rgba(10,20,30,.55); z-index:9997; align-items:center; justify-content:center; padding:16px;">
+    <div class="modal-scuro" style="background:var(--superficie); border-radius:14px; padding:18px; max-width:560px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,.25); max-height:88vh; display:flex; flex-direction:column;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:6px;">
+        <h2 style="margin:0; font-size:16px;" id="commentiTitolo">Commenti</h2>
+        <button class="del" id="btnChiudiCommenti" style="margin:0;">✕</button>
+      </div>
+      <div id="commentiLista" style="flex:1; overflow:auto; margin:8px 0; min-height:120px;"></div>
+      <textarea id="commentoTesto" placeholder="Scrivi un messaggio..." style="min-height:64px;"></textarea>
+      <button class="primary" id="btnInviaCommento" style="margin-top:8px;">Invia</button>
+      <p class="hint" id="commentoStato" style="margin:6px 0 0;"></p>
+    </div>
+  </div>
+
+  <div id="modalMessaggi" style="display:none; position:fixed; inset:0; background:rgba(10,20,30,.55); z-index:9996; align-items:center; justify-content:center; padding:16px;">
+    <div class="modal-scuro" style="background:var(--superficie); border-radius:14px; padding:18px; max-width:560px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,.25); max-height:88vh; overflow:auto;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+        <h2 style="margin:0; font-size:16px;">💬 Messaggi</h2>
+        <button class="del" id="btnChiudiMessaggi" style="margin:0;">✕</button>
+      </div>
+      <div id="messaggiLista" style="margin-top:10px;"></div>
+    </div>
+  </div>
 
   <div id="modalAtleta" style="display:none; position:fixed; inset:0; background:rgba(10,20,30,.55); z-index:9998; align-items:center; justify-content:center; padding:16px;">
     <div class="modal-scuro" style="background:var(--superficie); border-radius:14px; padding:20px; max-width:600px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,.25); max-height:88vh; overflow:auto;">
@@ -416,6 +441,8 @@
                 <option value="tutto">Tutto</option>
                 <option value="assegnati">Solo allenamenti assegnati</option>
               </select>
+              <input id="reportMese" type="month" style="width:auto; padding:4px 6px; font-size:12px;">
+              <button class="small" id="btnReportMensile" style="background:#0d3b66; color:#fff; border:none; margin:0;">📄 Report mensile</button>
               <button class="small" id="btnStampaScheda" style="background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; margin:0;">🖨️ Stampa / PDF</button>
             </span>
           </h2>
@@ -1480,6 +1507,11 @@ function enterApp() {
   }
 
   aggiornaNomeIntestazione();
+  const campoMese = document.getElementById('reportMese');
+  if(campoMese && !campoMese.value){
+    const o = new Date();
+    campoMese.value = o.getFullYear() + '-' + String(o.getMonth() + 1).padStart(2, '0');
+  }
   const campoNome = document.getElementById('nomeCoachInput');
   if(campoNome && !isAthleteMode) campoNome.value = nomeAllenatoreCorrente();
 
@@ -1591,7 +1623,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '59';
+const VERSIONE = '63';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -1623,6 +1655,8 @@ function normalizzaDati(d){
   ['Propriocezione', 'Reattività', 'Tempo di reazione'].forEach(g => {
     if(!Array.isArray(out.eserciziCustom[g])) out.eserciziCustom[g] = [];
   });
+
+  out.commenti = out.commenti || [];
 
   out.calendario = out.calendario || [];
   out.calendario.forEach(g => { if(!g.stato) g.stato = 'confermata'; if(!g.creatoDa) g.creatoDa = 'allenatore'; });
@@ -2799,6 +2833,186 @@ function renderStoricoAssegnati(){
   }).join('');
 }
 
+/* =========================================================
+   COMMENTI SULLE SEDUTE E NOTIFICHE
+   ========================================================= */
+let commentiSessioneCorrente = null;
+
+function commentiSessione(sessioneId){
+  return (db.commenti || []).filter(c => c.sessioneId === sessioneId)
+    .sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
+}
+
+function commentiNonLetti(){
+  const campo = isAthleteMode ? 'lettoAtleta' : 'lettoAllenatore';
+  return (db.commenti || []).filter(c => !c[campo]).length;
+}
+
+function nonLettiSessione(sessioneId){
+  const campo = isAthleteMode ? 'lettoAtleta' : 'lettoAllenatore';
+  return (db.commenti || []).filter(c => c.sessioneId === sessioneId && !c[campo]).length;
+}
+
+function aggiornaBadgeMessaggi(){
+  const badge = document.getElementById('msgCount');
+  if(!badge) return;
+  const n = commentiNonLetti();
+  badge.textContent = n > 9 ? '9+' : String(n);
+  badge.style.display = n > 0 ? 'block' : 'none';
+}
+
+function segnaCommentiLetti(sessioneId){
+  const campo = isAthleteMode ? 'lettoAtleta' : 'lettoAllenatore';
+  let cambiati = 0;
+  (db.commenti || []).forEach(c => {
+    if(c.sessioneId === sessioneId && !c[campo]){ c[campo] = true; cambiati++; }
+  });
+  if(cambiati){ saveData(); aggiornaBadgeMessaggi(); }
+}
+
+function aggiungiCommento(sessioneId, testo){
+  const pulito = String(testo || '').trim();
+  if(!pulito) return null;
+  const c = {
+    id: uid(),
+    sessioneId: sessioneId,
+    autore: isAthleteMode ? 'atleta' : 'allenatore',
+    testo: pulito.slice(0, 600),
+    quando: new Date().toISOString(),
+    lettoAllenatore: !isAthleteMode,
+    lettoAtleta: isAthleteMode
+  };
+  db.commenti = db.commenti || [];
+  db.commenti.push(c);
+  saveData();
+  return c;
+}
+
+function sessionePerCommenti(id){
+  return (db.sessions || []).filter(x => x.id === id)[0] || null;
+}
+
+function renderCommenti(sessioneId){
+  const box = document.getElementById('commentiLista');
+  if(!box) return;
+  const lista = commentiSessione(sessioneId);
+  if(!lista.length){
+    box.innerHTML = '<p class="hint" style="margin:0;">Nessun messaggio: scrivi il primo.</p>';
+    return;
+  }
+  box.innerHTML = lista.map(c => {
+    const mio = (c.autore === 'atleta') === isAthleteMode;
+    const quando = new Date(c.quando);
+    const ora = quando.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) + ' ' + quando.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    return '<div style="display:flex; margin-bottom:8px; ' + (mio ? 'justify-content:flex-end;' : '') + '">' +
+      '<div style="max-width:82%; background:' + (mio ? '#0d3b66' : '#eef3f9') + '; color:' + (mio ? '#fff' : '#1b2733') + '; border-radius:12px; padding:7px 10px;">' +
+        '<div style="font-size:10px; opacity:.75; margin-bottom:2px;">' + (c.autore === 'atleta' ? 'Atleta' : 'Allenatore') + ' · ' + esc(ora) + '</div>' +
+        '<div style="font-size:13px; line-height:1.4;">' + esc(c.testo) + '</div>' +
+      '</div></div>';
+  }).join('');
+  if(box.scrollHeight) box.scrollTop = box.scrollHeight;
+}
+
+function apriCommenti(sessioneId){
+  const s = sessionePerCommenti(sessioneId);
+  commentiSessioneCorrente = sessioneId;
+  const modal = document.getElementById('modalCommenti');
+  const titolo = document.getElementById('commentiTitolo');
+  if(!modal) return;
+
+  if(titolo){
+    const chi = s ? (isAthleteMode ? esc(s.planName || 'Allenamento') : esc(nomeAtleta(s.atletaId) + ' · ' + (s.planName || 'Allenamento'))) : 'Commenti';
+    titolo.innerHTML = '💬 ' + chi + (s ? ' <span style="font-size:12px; color:#7b8794;">' + esc(s.data) + '</span>' : '');
+  }
+  segnaCommentiLetti(sessioneId);
+  renderCommenti(sessioneId);
+  const st = document.getElementById('commentoStato');
+  if(st) st.textContent = '';
+  const campo = document.getElementById('commentoTesto');
+  if(campo) campo.value = '';
+  modal.style.display = 'flex';
+  if(campo) setTimeout(() => { try{ campo.focus(); }catch(e){} }, 50);
+}
+
+function chiudiCommenti(){
+  const modal = document.getElementById('modalCommenti');
+  if(modal) modal.style.display = 'none';
+  commentiSessioneCorrente = null;
+}
+
+function apriMessaggi(){
+  const modal = document.getElementById('modalMessaggi');
+  const box = document.getElementById('messaggiLista');
+  if(!modal || !box) return;
+
+  const campo = isAthleteMode ? 'lettoAtleta' : 'lettoAllenatore';
+  const perSessione = {};
+  (db.commenti || []).forEach(c => {
+    if(c[campo]) return;
+    perSessione[c.sessioneId] = perSessione[c.sessioneId] || [];
+    perSessione[c.sessioneId].push(c);
+  });
+
+  const chiavi = Object.keys(perSessione);
+  if(!chiavi.length){
+    box.innerHTML = '<p class="hint" style="margin:0;">Nessun messaggio nuovo.</p>';
+  } else {
+    box.innerHTML = chiavi.map(id => {
+      const s = sessionePerCommenti(id);
+      const ultimo = perSessione[id][perSessione[id].length - 1];
+      return '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid var(--bordo); border-radius:10px; padding:8px 10px; margin-bottom:8px;">' +
+        '<div><div style="font-size:13px; font-weight:600;">' + (s ? esc(isAthleteMode ? (s.planName || 'Allenamento') : nomeAtleta(s.atletaId)) : 'Seduta') + ' <span style="font-weight:400; color:#7b8794;">' + (s ? esc(s.data) : '') + '</span></div>' +
+        '<div style="font-size:12px; color:#52606d; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + esc(ultimo.testo) + '</div></div>' +
+        '<button class="small" data-commenti="' + id + '" style="margin:0;">Apri</button></div>';
+    }).join('');
+  }
+  modal.style.display = 'flex';
+}
+
+function chiudiMessaggi(){
+  const modal = document.getElementById('modalMessaggi');
+  if(modal) modal.style.display = 'none';
+}
+
+document.getElementById('btnChiudiCommenti').onclick = chiudiCommenti;
+document.getElementById('btnChiudiMessaggi').onclick = chiudiMessaggi;
+document.getElementById('btnMessaggi').onclick = apriMessaggi;
+
+document.getElementById('btnInviaCommento').onclick = async () => {
+  const campo = document.getElementById('commentoTesto');
+  const stato = document.getElementById('commentoStato');
+  if(!commentiSessioneCorrente) return;
+  const testo = campo ? campo.value.trim() : '';
+  if(!testo){ if(stato) stato.textContent = 'Scrivi un messaggio prima di inviare.'; return; }
+
+  if(isAthleteMode && cloudAttivo() && cloudAtleta){
+    if(stato) stato.textContent = 'Invio…';
+    try{ await cloudCommento(commentiSessioneCorrente, testo); }
+    catch(e){ if(stato) stato.textContent = ''; alert('Non riesco a inviare il messaggio: ' + messaggioCloud(e.message)); return; }
+  }
+
+  aggiungiCommento(commentiSessioneCorrente, testo);
+  if(campo) campo.value = '';
+  if(stato) stato.textContent = 'Inviato.';
+  renderCommenti(commentiSessioneCorrente);
+  aggiornaBadgeMessaggi();
+  try{ renderAll(); }catch(e){}
+};
+
+async function cloudCommento(sessioneId, testo){
+  return await cloudRichiesta('POST', '/rest/v1/rpc/atleta_commento', {
+    p_codice: credenzialiAtleta.codice,
+    p_pin: credenzialiAtleta.pin,
+    p_sessione: sessioneId,
+    p_testo: testo
+  });
+}
+
+function pulsanteCommenti(sessioneId){
+  const n = nonLettiSessione(sessioneId);
+  return '<button class="small" data-commenti="' + sessioneId + '" style="margin:0 4px 0 0; background:' + (n ? '#fff3cd' : '#e7f0fa') + '; color:' + (n ? '#856404' : '#0d3b66') + '; border:1px solid ' + (n ? '#f0d58c' : '#cfd8e3') + ';">💬' + (n ? ' ' + n : '') + '</button>';
+}
+
 function renderAssigned(){
   renderStoricoAssegnati();
   const filtro = isAthleteMode ? currentAthleteId : document.getElementById('filtroAssegnati').value;
@@ -2808,10 +3022,10 @@ function renderAssigned(){
     const tipi = s.blocchi.map(testoBlocco).join(' + ');
     const durataTot = s.blocchi.reduce((sum,b)=>sum+(b.durata||0),0); const caricoTot = s.blocchi.reduce((sum,b)=>sum+(b.durata||0)*(b.rpe||0),0);
     const azioni = isAthleteMode
-      ? '<span class="pill grey">sola lettura</span>'
+      ? '<span class="pill grey">sola lettura</span> ' + pulsanteCommenti(s.id)
       : (s.completamento
-          ? '<span class="pill" style="background:#e6f4ea; color:#1e6b34; font-weight:700;">completata</span>'
-          : `<button class="ok small" data-apri="${s.id}" data-mode="completa">Completa</button><button class="small" data-apri="${s.id}" data-mode="modifica">Modifica</button><button class="del" data-del-plan="${s.id}">✕</button>`);
+          ? '<span class="pill" style="background:#e6f4ea; color:#1e6b34; font-weight:700;">completata</span> ' + pulsanteCommenti(s.id)
+          : pulsanteCommenti(s.id) + `<button class="ok small" data-apri="${s.id}" data-mode="completa">Completa</button><button class="small" data-apri="${s.id}" data-mode="modifica">Modifica</button><button class="del" data-del-plan="${s.id}">✕</button>`);
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${esc(s.data)}</td><td>${esc(nomeAtleta(s.atletaId))}</td><td><b>${esc(s.planName||'Personalizzato')}</b><br><span style="font-size:11px; color:#7b8794;">${esc(tipi)}</span></td><td>${testoDurata(durataTot)}</td><td>${getSemaforo(caricoTot, 'session')} ${Math.round(caricoTot)}</td><td style="white-space:nowrap;">${azioni}</td>`;
     t.appendChild(tr);
@@ -3763,6 +3977,11 @@ document.body.addEventListener('click', async e => {
   }
   if(!t || !t.dataset) return;
 
+  if(t.dataset.commenti){
+    apriCommenti(t.dataset.commenti);
+    return;
+  }
+
   if(t.dataset.scegliAtleta){
     vaiA('home');
     const selA = document.getElementById('homeAtletaSelect');
@@ -3905,7 +4124,7 @@ function renderAll(){
   fillMultiSelect(document.getElementById('assignAtleti'), true); fillModelSelect(document.getElementById('assignModelSelect'));
   renderAssigned(); renderSedute(); renderGare(); renderTests(); renderStats(); renderAnalisiAltezze();
   renderStorico(); renderAnalisi(); renderCondivisioni(); renderClub();
-  renderCalendario(); renderPeriodizzazione(); renderAudit(); renderCalendarioAtleta(); renderEserciziCustomUI(); renderCheckinSquadra(); renderDashboard();
+  renderCalendario(); renderPeriodizzazione(); renderAudit(); renderCalendarioAtleta(); renderEserciziCustomUI(); renderCheckinSquadra(); renderDashboard(); aggiornaBadgeMessaggi();
   applicaVistaAtleta();
 }
 
@@ -5921,7 +6140,8 @@ const SQL_SETUP = [
 "    'comps', coalesce((select jsonb_agg(x) from jsonb_array_elements(coalesce(v_data->'comps', '[]'::jsonb)) x where x->>'atletaId' = v_id), '[]'::jsonb),",
 "    'tests', coalesce((select jsonb_agg(x) from jsonb_array_elements(coalesce(v_data->'tests', '[]'::jsonb)) x where x->>'atletaId' = v_id), '[]'::jsonb),",
 "    'checkins', coalesce((select jsonb_agg(x) from jsonb_array_elements(coalesce(v_data->'checkins', '[]'::jsonb)) x where x->>'atletaId' = v_id), '[]'::jsonb),",
-"    'calendario', coalesce(v_data->'calendario', '[]'::jsonb)",
+"    'calendario', coalesce(v_data->'calendario', '[]'::jsonb),",
+"    'commenti', coalesce((select jsonb_agg(c) from jsonb_array_elements(coalesce(v_data->'commenti', '[]'::jsonb)) c where exists (select 1 from jsonb_array_elements(coalesce(v_data->'sessions', '[]'::jsonb)) s where s->>'id' = c->>'sessioneId' and s->>'atletaId' = v_id)), '[]'::jsonb)",
 "  );",
 "end;",
 "$fn$;",
@@ -6113,7 +6333,52 @@ const SQL_SETUP = [
 "end;",
 "$fp$;",
 "",
-"grant execute on function public.atleta_proposta_gara(text, text, jsonb) to anon, authenticated;"
+"grant execute on function public.atleta_proposta_gara(text, text, jsonb) to anon, authenticated;",
+"",
+"create or replace function public.atleta_commento(p_codice text, p_pin text, p_sessione text, p_testo text)",
+"returns boolean",
+"language plpgsql security definer set search_path = public, extensions",
+"as $fc$",
+"declare",
+"  v_hash text; v_coach uuid; v_data jsonb; v_ath jsonb; v_id text; v_sess jsonb;",
+"begin",
+"  v_hash := 'sha256:' || encode(digest(coalesce(p_pin, ''), 'sha256'), 'hex');",
+"  select cd.coach_id, cd.data into v_coach, v_data",
+"  from public.coach_data cd",
+"  where exists (",
+"    select 1 from jsonb_array_elements(coalesce(cd.data->'athletes', '[]'::jsonb)) a",
+"    where lower(coalesce(a->>'codice', '')) = lower(coalesce(p_codice, ''))",
+"      and coalesce(a->>'password', '') in (v_hash, coalesce(p_pin, ''))",
+"  ) limit 1;",
+"  if v_data is null then return false; end if;",
+"",
+"  select a into v_ath from jsonb_array_elements(coalesce(v_data->'athletes', '[]'::jsonb)) a",
+"   where lower(coalesce(a->>'codice', '')) = lower(coalesce(p_codice, '')) limit 1;",
+"  v_id := v_ath->>'id';",
+"",
+"  select s into v_sess from jsonb_array_elements(coalesce(v_data->'sessions', '[]'::jsonb)) s",
+"   where s->>'id' = p_sessione limit 1;",
+"  if v_sess is null or (v_sess->>'atletaId') <> v_id then return false; end if;",
+"  if length(trim(coalesce(p_testo, ''))) < 1 then return false; end if;",
+"",
+"  update public.coach_data",
+"     set data = jsonb_set(data, '{commenti}', coalesce(data->'commenti', '[]'::jsonb) || jsonb_build_array(",
+"            jsonb_build_object(",
+"              'id', 'ck_' || extract(epoch from clock_timestamp())::bigint || '_' || floor(random() * 1000)::int,",
+"              'sessioneId', p_sessione,",
+"              'autore', 'atleta',",
+"              'testo', left(p_testo, 600),",
+"              'quando', to_char(now() at time zone 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),",
+"              'lettoAllenatore', false,",
+"              'lettoAtleta', true",
+"            ))),",
+"         updated_at = now()",
+"   where coach_id = v_coach;",
+"  return true;",
+"end;",
+"$fc$;",
+"",
+"grant execute on function public.atleta_commento(text, text, text, text) to anon, authenticated;"
 ].join('\n');
 
 /* --- pannello di configurazione del cloud (schermata di accesso) --- */
@@ -6626,6 +6891,145 @@ function renderCheckinAllenatore(id){
 /* =========================================================
    STAMPA / PDF DELLA SCHEDA
    ========================================================= */
+function intervalloMese(anno, mese){
+  return { inizio: new Date(anno, mese - 1, 1), fine: new Date(anno, mese, 1) };
+}
+
+function metricaMese(atletaId, anno, mese){
+  const range = intervalloMese(anno, mese);
+  const dentro = d => { const x = dataLocale(d); return x >= range.inizio && x < range.fine; };
+
+  const svolte = (db.sessions || []).filter(x => x.atletaId === atletaId && x.stato !== 'pianificata' && dentro(x.data));
+  const previste = (db.sessions || []).filter(x => x.atletaId === atletaId && x.stato === 'pianificata' && dentro(x.data));
+
+  const caricoS = x => (x.blocchi || []).reduce((t, b) => t + (+b.durata || 0) * (+b.rpe || 0), 0) * quotaSessione(x);
+  const durataS = x => (x.blocchi || []).reduce((t, b) => t + (+b.durata || 0), 0);
+  const contattiS = x => (x.blocchi || []).reduce((t, b) => t + (+b.salti || 0) + (+b.contatti || 0), 0);
+  const rpeS = x => {
+    const b = (x.blocchi || []).filter(y => (+y.rpe || 0) > 0);
+    return b.length ? b.reduce((t, y) => t + (+y.rpe || 0), 0) / b.length : 0;
+  };
+
+  const carico = svolte.reduce((t, x) => t + caricoS(x), 0);
+  const durata = svolte.reduce((t, x) => t + durataS(x), 0);
+  const contatti = svolte.reduce((t, x) => t + contattiS(x), 0);
+  const rpe = svolte.length ? svolte.reduce((t, x) => t + rpeS(x), 0) / svolte.length : 0;
+
+  const cks = (db.checkins || []).filter(c => c.atletaId === atletaId && dentro(c.data));
+  const wellness = cks.map(punteggioWellness).filter(v => v !== null);
+  const gare = (db.comps || []).filter(g => g.atletaId === atletaId && dentro(g.data));
+
+  const settimane = {};
+  svolte.forEach(x => {
+    const d = dataLocale(x.data);
+    const sett = Math.min(5, Math.floor((d.getDate() - 1) / 7) + 1);
+    settimane[sett] = settimane[sett] || { sedute: 0, carico: 0, contatti: 0 };
+    settimane[sett].sedute++;
+    settimane[sett].carico += caricoS(x);
+    settimane[sett].contatti += contattiS(x);
+  });
+
+  return {
+    anno: anno, mese: mese,
+    svolte: svolte.length,
+    previste: previste.length,
+    aderenza: previste.length ? Math.round(svolte.length / previste.length * 100) : (svolte.length ? 100 : 0),
+    carico: Math.round(carico),
+    durata: Math.round(durata),
+    contatti: contatti,
+    rpeMedio: Math.round(rpe * 10) / 10,
+    checkin: cks.length,
+    wellness: wellness.length ? Math.round(wellness.reduce((a, b) => a + b, 0) / wellness.length) : null,
+    dolori: cks.filter(c => (+c.dolore || 0) >= 4).length,
+    gare: gare,
+    settimane: settimane,
+    parziali: svolte.filter(x => x.completamento === 'parziale').length
+  };
+}
+
+function reportMensileDati(atletaId, anno, mese){
+  const attuale = metricaMese(atletaId, anno, mese);
+  const mesePrec = mese === 1 ? 12 : mese - 1;
+  const annoPrec = mese === 1 ? anno - 1 : anno;
+  const precedente = metricaMese(atletaId, annoPrec, mesePrec);
+  return { atletaId: atletaId, anno: anno, mese: mese, attuale: attuale, precedente: precedente };
+}
+
+function deltaPercento(prima, dopo){
+  if(!prima) return null;
+  return Math.round((dopo - prima) / prima * 100);
+}
+
+const NOMI_MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+
+function htmlReportMensile(atletaId, anno, mese){
+  const r = reportMensileDati(atletaId, anno, mese);
+  const a = (db.athletes || []).find(x => x.id === atletaId) || {};
+  const att = r.attuale, pre = r.precedente;
+
+  const voce = (titolo, valore, unita, prima, migliore) => {
+    const d = deltaPercento(prima, valore);
+    let segno = '';
+    if(d !== null && prima !== valore){
+      const su = d > 0;
+      const buono = migliore === 'giu' ? !su : su;
+      segno = ' <span style="font-size:11px; font-weight:700; color:' + (buono ? '#1e6b34' : '#c0392b') + ';">' + (su ? '▲' : '▼') + ' ' + Math.abs(d) + '%</span>';
+    }
+    return '<div class="kpi"><span>' + esc(titolo) + '</span><b>' + valore + (unita || '') + segno + '</b></div>';
+  };
+
+  const settimane = Object.keys(att.settimane).sort().map(k => {
+    const w = att.settimane[k];
+    return '<tr><td>Settimana ' + k + '</td><td>' + w.sedute + '</td><td>' + Math.round(w.carico) + '</td><td>' + w.contatti + '</td></tr>';
+  }).join('') || '<tr><td colspan="4">Nessuna seduta registrata</td></tr>';
+
+  const gare = att.gare.length
+    ? '<table><thead><tr><th>Data</th><th>Gara</th><th>Disciplina</th><th>Misura</th></tr></thead><tbody>' +
+      att.gare.map(g => '<tr><td>' + esc(g.data) + '</td><td>' + esc(g.nome || '—') + '</td><td>' + esc(g.disciplina || '') + '</td><td>' + esc(g.misura || '—') + '</td></tr>').join('') +
+      '</tbody></table>'
+    : '<p class="nota">Nessuna gara o test registrato nel mese.</p>';
+
+  return '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Report ' + esc(a.cognome || '') + ' ' + NOMI_MESI[mese] + ' ' + anno + '</title>' +
+    '<style>' + CSS_STAMPA +
+    '.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}' +
+    '.kpi{border:1px solid #dde3ea;border-radius:10px;padding:8px 10px}' +
+    '.kpi span{display:block;font-size:10px;text-transform:uppercase;color:#52606d;letter-spacing:.04em}' +
+    '.kpi b{font-size:17px;color:#0d3b66}' +
+    '</style></head><body>' +
+    '<h1>Report mensile — ' + NOMI_MESI[mese] + ' ' + anno + '</h1>' +
+    '<div class="nota"><b>' + esc((a.cognome || '') + ' ' + (a.nome || '')) + '</b> · ' + esc(a.categoria || '') + ' · ' + esc(a.disciplina || '') +
+    ' · PB alto ' + esc(a.pbAlto || '—') + ' m · PB asta ' + esc(a.pbAsta || '—') + ' m</div>' +
+    '<div class="nota">Allenatore: ' + esc(nomeAllenatoreCorrente()) + ' · generato il ' + new Date().toLocaleDateString('it-IT') + '</div>' +
+
+    '<h2>Il mese in sintesi</h2>' +
+    '<div class="kpi-grid">' +
+      voce('Sedute svolte', att.svolte, '', pre.svolte) +
+      voce('Aderenza', att.aderenza, '%', pre.aderenza) +
+      voce('Carico totale', att.carico, '', pre.carico) +
+      voce('Durata totale', att.durata, "'", pre.durata) +
+      voce('Contatti', att.contatti, '', pre.contatti, 'giu') +
+      voce('RPE medio', att.rpeMedio, '', pre.rpeMedio) +
+    '</div>' +
+
+    '<h2>Andamento settimanale</h2>' +
+    '<table><thead><tr><th>Periodo</th><th>Sedute</th><th>Carico</th><th>Contatti</th></tr></thead><tbody>' + settimane + '</tbody></table>' +
+
+    '<h2>Stato e benessere</h2>' +
+    '<div class="kpi-grid">' +
+      '<div class="kpi"><span>Check-in</span><b>' + att.checkin + '</b></div>' +
+      '<div class="kpi"><span>Wellness medio</span><b>' + (att.wellness === null ? '—' : att.wellness + '/20') + '</b></div>' +
+      '<div class="kpi"><span>Giorni con dolore alto</span><b>' + att.dolori + '</b></div>' +
+    '</div>' +
+    (att.parziali ? '<p class="nota">' + att.parziali + ' sedute completate solo in parte nel mese.</p>' : '') +
+
+    '<h2>Gare e test</h2>' + gare +
+
+    '<h2>Note dell\'allenatore</h2>' +
+    '<div class="box">' + (a.scheda ? esc(a.scheda) : '<span class="nota">Nessuna nota.</span>') + '</div>' +
+    '<p class="nota" style="margin-top:18px;">Documento generato da ALTO &amp; ASTA Manager · confronto con ' + NOMI_MESI[mese === 1 ? 12 : mese - 1] + ' ' + (mese === 1 ? anno - 1 : anno) + '</p>' +
+    '</body></html>';
+}
+
 const CSS_STAMPA = 'body{font-family:system-ui,Segoe UI,Arial;margin:22px;color:#1d2733}' +
   'h1{font-size:20px;color:#0d3b66;margin:0 0 4px}' +
   'h2{font-size:14px;color:#0d3b66;margin:16px 0 6px;border-bottom:1px solid #dde3ea;padding-bottom:3px}' +
@@ -6754,6 +7158,26 @@ document.getElementById('btnStampaAssegnati').onclick = () => {
   const html = htmlAssegnazioni(filtro, cosa);
   const w = window.open('', '_blank');
   if(!w){ alert('Consenti le finestre popup per stampare.'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { try{ w.print(); }catch(e){} }, 400);
+};
+
+document.getElementById('btnReportMensile').onclick = () => {
+  const id = document.getElementById('homeAtletaSelect').value;
+  if(!id){ alert('Seleziona un atleta.'); return; }
+  const campoMese = document.getElementById('reportMese');
+  let anno, mese;
+  if(campoMese && campoMese.value && campoMese.value.indexOf('-') > 0){
+    const pezzi = campoMese.value.split('-');
+    anno = parseInt(pezzi[0], 10); mese = parseInt(pezzi[1], 10);
+  } else {
+    const oggi = new Date(); anno = oggi.getFullYear(); mese = oggi.getMonth() + 1;
+  }
+  const html = htmlReportMensile(id, anno, mese);
+  const w = window.open('', '_blank');
+  if(!w){ alert('Consenti le finestre popup per generare il report.'); return; }
   w.document.write(html);
   w.document.close();
   w.focus();
