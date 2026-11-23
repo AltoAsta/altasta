@@ -318,7 +318,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v64</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v67</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -587,7 +587,17 @@
         <button class="primary" id="btnSaveModel">Salva Modello</button>
         <button class="small" id="btnCancelEditModel" style="display:none; background:#e3e9f0; color:#52606d; margin-left:10px; padding:10px 18px;">Annulla</button>
       </div>
-      <div class="card"><h2>I tuoi Modelli</h2><div class="model-list" id="listModels"></div></div>
+      <div class="card">
+        <h2>I tuoi Modelli</h2>
+        <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
+          <button class="small" id="btnEsportaModelli" style="background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3;">⇩ Esporta tutti</button>
+          <button class="small" id="btnImportaModelli" style="background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3;">📥 Importa modelli</button>
+          <input type="file" id="fileModelli" accept=".json,application/json" style="display:none;">
+        </div>
+        <p class="hint" style="margin-top:0;">Puoi passare i tuoi modelli a un altro allenatore con un file: lui li importa in un clic.</p>
+        <div id="importModelliAnteprima"></div>
+        <div class="model-list" id="listModels"></div>
+      </div>
       <div id="figuraModello"></div>
     </section>
 
@@ -1028,6 +1038,16 @@
               <button class="small primary" id="btnImportaGare" style="margin:0;">Importa gare</button>
             </div>
             <div id="csvGareAnteprima" style="margin-top:10px;"></div>
+          </div>
+
+          <div style="flex:1; min-width:280px; border:1px solid var(--bordo); border-radius:12px; padding:12px;">
+            <h3 style="font-size:13px; margin:0 0 6px;">📅 Calendario gare (ICS)</h3>
+            <p class="hint" style="margin:0 0 8px;">Calendario nazionale/regionale in formato <b>.ics</b>: ogni gara diventa un evento del calendario (per tutti).</p>
+            <input type="file" id="icsCalendarioFile" accept=".ics,text/calendar" style="padding:6px;">
+            <div style="display:flex; gap:6px; margin-top:8px;">
+              <button class="small primary" id="btnImportaCalendario" style="margin:0;">Importa calendario</button>
+            </div>
+            <div id="icsCalendarioAnteprima" style="margin-top:10px;"></div>
           </div>
 
           <div style="flex:1; min-width:280px; border:1px solid var(--bordo); border-radius:12px; padding:12px;">
@@ -1652,7 +1672,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '64';
+const VERSIONE = '67';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -2793,7 +2813,7 @@ function renderModelli() {
   db.models.forEach(m => {
     const durata = m.blocchi.reduce((sum,b)=>sum+(b.durata||0),0); const div = document.createElement('div'); div.className = 'model-item';
     const miniature = (m.blocchi || []).slice(0, 5).map(b => '<span style="margin-right:4px;">' + disegnoEsercizioScaled(b, 62, 27) + '</span>').join('');
-    div.innerHTML = `<div><strong>${esc(m.nome)}</strong> <span style="font-size:12px; color:#7b8794;">(${testoDurata(durata)}, ${m.blocchi.length} blocchi)</span>${m.note ? `<div style="font-size:12px; color:#52606d; margin-top:4px;">${esc(m.note)}</div>` : ''}<div style="margin-top:6px;">${miniature}</div></div><div><button class="small" data-figura="${m.id}">Figura</button><button class="small" onclick="editModel('${m.id}')">Modifica</button><button class="del" data-del-model="${m.id}">✕</button></div>`;
+    div.innerHTML = `<div><strong>${esc(m.nome)}</strong> <span style="font-size:12px; color:#7b8794;">(${testoDurata(durata)}, ${m.blocchi.length} blocchi)</span>${m.note ? `<div style="font-size:12px; color:#52606d; margin-top:4px;">${esc(m.note)}</div>` : ''}<div style="margin-top:6px;">${miniature}</div></div><div><button class="small" data-figura="${m.id}">Figura</button><button class="small" data-esporta="${m.id}" title="Esporta questo modello">⇩</button><button class="small" onclick="editModel('${m.id}')">Modifica</button><button class="del" data-del-model="${m.id}">✕</button></div>`;
     list.appendChild(div);
   });
 }
@@ -4006,6 +4026,11 @@ document.body.addEventListener('click', async e => {
   }
   if(!t || !t.dataset) return;
 
+  if(t.dataset.esporta){
+    esportaModello(t.dataset.esporta);
+    return;
+  }
+
   if(t.dataset.commenti){
     apriCommenti(t.dataset.commenti);
     return;
@@ -4661,6 +4686,166 @@ function eserciziPliometria(categoria, fase){
   }
   return '4×10 balzi orizzontali, 4×5 salti su plinto 50 cm, 3×8 hop, 20 contatti a scaletta, 2×5 salti con rincorsa breve. Qualità su ogni contatto, recupero pieno.';
 }
+
+/* =========================================================
+   SCAMBIO DI MODELLI (file .json)
+   ========================================================= */
+function modelloPerCondivisione(m){
+  return {
+    nome: m.nome || 'Modello',
+    obiettivo: m.obiettivo || '',
+    note: m.note || '',
+    categoria: (m.categoria || ''),
+    fase: (m.fase || ''),
+    blocchi: (m.blocchi || []).map(b => ({
+      tipo: b.tipo, serie: +b.serie || 0, ripetuta: b.ripetuta || '',
+      durata: +b.durata || 0, rpe: +b.rpe || 0, salti: +b.salti || 0, contatti: +b.contatti || 0,
+      recupero: b.recupero || '', recuperoFine: b.recuperoFine || '',
+      focus: b.focus || '', esercizio: b.esercizio || ''
+    }))
+  };
+}
+
+function pacchettoModelli(lista){
+  return {
+    app: 'ALTO-ASTA',
+    schema: 1,
+    esportato: new Date().toISOString(),
+    autore: nomeAllenatoreCorrente(),
+    modelli: (lista || []).map(modelloPerCondivisione)
+  };
+}
+
+function scaricaJson(nome, dati){
+  const blob = new Blob([JSON.stringify(dati, null, 2)], { type: 'application/json;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nome;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function esportaModello(id){
+  const m = (db.models || []).filter(x => x.id === id)[0];
+  if(!m) return;
+  const nomeFile = 'modello-' + String(m.nome || 'allenamento').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.json';
+  scaricaJson(nomeFile, pacchettoModelli([m]));
+}
+
+function esportaTuttiModelli(){
+  if(!(db.models || []).length){ alert('Non hai ancora modelli da esportare.'); return; }
+  scaricaJson('modelli-altasta.json', pacchettoModelli(db.models));
+}
+
+function leggiModelliDaJson(testo){
+  let dati = null;
+  try{ dati = JSON.parse(String(testo || '')); }
+  catch(e){ return { modelli: [], errori: ['Il file non è un JSON valido.'] }; }
+
+  let lista = [];
+  if(Array.isArray(dati)) lista = dati;
+  else if(dati && Array.isArray(dati.modelli)) lista = dati.modelli;
+  else if(dati && dati.nome && Array.isArray(dati.blocchi)) lista = [dati];
+  else return { modelli: [], errori: ['Il file non contiene modelli (atteso un array o un oggetto con "modelli").'] };
+
+  const avvisi = [];
+  if(dati && dati.autore) avvisi.push('Pacchetto di: ' + dati.autore + (dati.esportato ? ' · ' + String(dati.esportato).slice(0, 10) : ''));
+
+  const modelli = [];
+  lista.forEach((m, idx) => {
+    if(!m || !m.nome || !Array.isArray(m.blocchi) || !m.blocchi.length){
+      avvisi.push('Modello ' + (idx + 1) + ' ignorato: manca il nome o i blocchi.');
+      return;
+    }
+    const blocchi = m.blocchi.filter(b => b && b.tipo).map(b => ({
+      tipo: String(b.tipo).slice(0, 60),
+      serie: Math.max(0, Math.min(60, parseInt(b.serie, 10) || 0)),
+      ripetuta: String(b.ripetuta || '').slice(0, 40),
+      durata: Math.max(0, Math.min(300, parseDurata(b.durata))),
+      rpe: Math.max(0, Math.min(10, parseInt(b.rpe, 10) || 0)),
+      salti: Math.max(0, Math.min(500, parseInt(b.salti, 10) || 0)),
+      contatti: Math.max(0, Math.min(500, parseInt(b.contatti, 10) || 0)),
+      recupero: String(b.recupero || '').slice(0, 40),
+      recuperoFine: String(b.recuperoFine || '').slice(0, 40),
+      focus: String(b.focus || '').slice(0, 300),
+      esercizio: String(b.esercizio || '').slice(0, 40)
+    }));
+    if(!blocchi.length){ avvisi.push('Modello "' + m.nome + '" ignorato: nessun blocco valido.'); return; }
+    modelli.push({
+      nome: String(m.nome).slice(0, 80),
+      obiettivo: String(m.obiettivo || '').slice(0, 200),
+      note: String(m.note || '').slice(0, 500),
+      categoria: String(m.categoria || '').slice(0, 40),
+      fase: String(m.fase || '').slice(0, 40),
+      blocchi: blocchi
+    });
+  });
+
+  return { modelli: modelli, avvisi: avvisi, errori: [] };
+}
+
+function applicaImportModelli(elenco){
+  let importati = 0;
+  (elenco || []).forEach(m => {
+    db.models = db.models || [];
+    db.models.push({
+      id: uid(),
+      nome: m.nome,
+      obiettivo: m.obiettivo || '',
+      note: m.note || '',
+      blocchi: m.blocchi
+    });
+    (m.blocchi || []).forEach(b => {
+      if(b.tipo && (db.blockTypes || []).indexOf(b.tipo) === -1) db.blockTypes.push(b.tipo);
+    });
+    importati++;
+  });
+  if(importati){
+    registraAttivita('Modelli', 'Importati ' + importati + ' modelli da file');
+    saveData(); renderAll();
+  }
+  return importati;
+}
+
+function anteprimaImportModelli(esito){
+  const box = document.getElementById('importModelliAnteprima');
+  if(!box) return;
+  if(esito.errori && esito.errori.length){
+    box.innerHTML = '<p class="hint" style="color:#c0392b;">' + esito.errori.map(esc).join('<br>') + '</p>';
+    return;
+  }
+  if(!esito.modelli.length){
+    box.innerHTML = '<p class="hint" style="color:#c0392b;">Nessun modello valido nel file.</p>';
+    return;
+  }
+  const righe = esito.modelli.map(m => {
+    const durata = m.blocchi.reduce((t, b) => t + (+b.durata || 0), 0);
+    const carico = m.blocchi.reduce((t, b) => t + (+b.durata || 0) * (+b.rpe || 0), 0);
+    return '<tr><td>' + esc(m.nome) + '</td><td>' + m.blocchi.length + '</td><td>' + testoDurata(durata) + '</td><td>' + Math.round(carico) + '</td></tr>';
+  }).join('');
+  box.innerHTML = '<div class="card" style="background:#f8fafc; margin-bottom:10px;">' +
+    '<p class="hint" style="margin-top:0;">' + esito.modelli.length + ' modelli pronti' + ((esito.avvisi || []).length ? ' · ' + esito.avvisi.map(esc).join(' · ') : '') + '</p>' +
+    '<table style="font-size:12px;"><thead><tr><th>Modello</th><th>Blocchi</th><th>Tempo</th><th>Carico</th></tr></thead><tbody>' + righe + '</tbody></table>' +
+    '<button class="primary" id="btnConfermaImportModelli" style="margin-top:8px;">Importa ' + esito.modelli.length + ' modelli</button></div>';
+
+  const btn = document.getElementById('btnConfermaImportModelli');
+  if(btn) btn.onclick = () => {
+    const n = applicaImportModelli(esito.modelli);
+    box.innerHTML = '<p class="hint">' + n + ' modelli importati. Li trovi qui sotto.</p>';
+  };
+}
+
+document.getElementById('btnEsportaModelli').onclick = esportaTuttiModelli;
+document.getElementById('btnImportaModelli').onclick = () => document.getElementById('fileModelli').click();
+document.getElementById('fileModelli').onchange = () => {
+  const input = document.getElementById('fileModelli');
+  if(!input || !input.files || !input.files[0]) return;
+  const lettore = new FileReader();
+  lettore.onload = () => {
+    anteprimaImportModelli(leggiModelliDaJson(String(lettore.result || '')));
+    input.value = '';
+  };
+  lettore.readAsText(input.files[0], 'utf-8');
+};
 
 /* =========================================================
    METODO: archetipi di seduta, limiti di categoria, validazione
@@ -6980,6 +7165,189 @@ function anteprimaCsv(contenitoreId, risultato, tipo){
   box.innerHTML = '<p class="hint" style="margin:0 0 6px;">' + risultato.righe.length + ' righe · ' + ok + ' abbinate a un atleta.</p>' +
     '<table style="font-size:12px;"><thead><tr><th>Data</th><th>Atleta</th><th>' + (tipo === 'gare' ? 'Disciplina' : 'Tipo') + '</th><th>' + (tipo === 'gare' ? 'Misura' : 'Durata') + '</th></tr></thead><tbody>' + prime + '</tbody></table>';
 }
+
+function icsSrotola(testo){
+  return String(testo || '').replace(/\r\n?/g, '\n').split('\n').reduce((acc, riga) => {
+    if(/^[ \t]/.test(riga) && acc.length) acc[acc.length - 1] += riga.slice(1);
+    else acc.push(riga);
+    return acc;
+  }, []);
+}
+
+function icsDescrivi(valore){
+  return String(valore || '')
+    .replace(/\\n/gi, ' ')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\')
+    .trim();
+}
+
+function icsData(valore){
+  const v = String(valore || '').trim();
+  const soloData = v.match(/^(\d{4})(\d{2})(\d{2})/);
+  if(!soloData) return '';
+  let anno = parseInt(soloData[1], 10), mese = parseInt(soloData[2], 10), giorno = parseInt(soloData[3], 10);
+
+  if(/T\d{6}Z$/.test(v)){
+    const ora = parseInt(v.substr(9, 2), 10), min = parseInt(v.substr(11, 2), 10);
+    const d = new Date(Date.UTC(anno, mese - 1, giorno, ora, min));
+    anno = d.getFullYear(); mese = d.getMonth() + 1; giorno = d.getDate();
+  }
+  return anno + '-' + String(mese).padStart(2, '0') + '-' + String(giorno).padStart(2, '0');
+}
+
+function prioritaDaTitolo(titolo){
+  const t = String(titolo || '').toLowerCase();
+  if(t.indexOf('campionati italiani') !== -1 || t.indexOf('italiano assoluto') !== -1) return 'A';
+  if(t.indexOf('campionato regionale') !== -1 || t.indexOf('regionali') !== -1 || t.indexOf('regionale') !== -1) return 'B';
+  return 'C';
+}
+
+function icsEventi(testo){
+  const righe = icsSrotola(testo);
+  const eventi = [];
+  let corrente = null, dentro = false;
+
+  righe.forEach(riga => {
+    const upper = riga.toUpperCase();
+    if(upper.indexOf('BEGIN:VEVENT') === 0){ corrente = {}; dentro = true; return; }
+    if(upper.indexOf('END:VEVENT') === 0){
+      if(corrente && corrente.data && corrente.nome) eventi.push(corrente);
+      corrente = null; dentro = false; return;
+    }
+    if(!dentro || !corrente) return;
+
+    const duepunti = riga.indexOf(':');
+    if(duepunti < 1) return;
+    const nomeProp = riga.slice(0, duepunti).toUpperCase();
+    const valore = riga.slice(duepunti + 1);
+
+    if(nomeProp.indexOf('DTSTART') === 0) corrente.data = icsData(valore);
+    else if(nomeProp.indexOf('SUMMARY') === 0) corrente.nome = icsDescrivi(valore);
+    else if(nomeProp.indexOf('LOCATION') === 0) corrente.luogo = icsDescrivi(valore);
+    else if(nomeProp.indexOf('DESCRIPTION') === 0) corrente.descrizione = icsDescrivi(valore);
+  });
+
+  return eventi;
+}
+
+function calendarioGiaPresente(evento){
+  const chiave = normNome(evento.nome);
+  return (db.calendario || []).some(g => g.data === evento.data && normNome(g.nome) === chiave);
+}
+
+function applicaImportCalendario(eventi){
+  let importati = 0, duplicati = 0;
+  eventi.forEach(e => {
+    if(calendarioGiaPresente(e)){ duplicati++; return; }
+    db.calendario = db.calendario || [];
+    db.calendario.push({
+      id: uid(),
+      data: e.data,
+      nome: e.nome,
+      luogo: e.luogo || '',
+      disciplina: 'Entrambe',
+      priorita: prioritaDaTitolo(e.nome),
+      atletaId: '',
+      stato: 'confermata',
+      creatoDa: 'allenatore',
+      note: e.descrizione || ''
+    });
+    importati++;
+  });
+  if(importati){
+    registraAttivita('Calendario', 'Importate ' + importati + ' gare dal calendario ICS');
+    saveData(); renderAll();
+  }
+  return { importati: importati, duplicati: duplicati };
+}
+
+function icsRilevante(evento){
+  const testo = (String(evento.nome || '') + ' ' + String(evento.descrizione || '')).toLowerCase();
+  return /campionat|italian|regional|cross|indoor|salto|alto|asta|giovanil|studenti|assolut/.test(testo);
+}
+
+function anteprimaIcs(eventi, filtro){
+  const box = document.getElementById('icsCalendarioAnteprima');
+  if(!box) return;
+  if(!eventi.length){
+    box.innerHTML = '<p class="hint" style="color:#c0392b;">Nessuna gara trovata nel file: verifica che sia un calendario .ics con eventi.</p>';
+    return;
+  }
+
+  const cerca = String(filtro || '').toLowerCase();
+  const visibili = eventi.map((e, i) => ({ e: e, i: i })).filter(x => !cerca ||
+    (String(x.e.nome) + ' ' + String(x.e.luogo || '') + ' ' + String(x.e.descrizione || '')).toLowerCase().indexOf(cerca) !== -1);
+
+  const rilevanti = eventi.filter(icsRilevante).length;
+
+  box.innerHTML =
+    '<div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">' +
+      '<input id="icsCerca" placeholder="Cerca (es. cross, campionati, Roma)" style="flex:1; min-width:150px; padding:6px 8px;" value="' + esc(filtro || '') + '">' +
+      '<button class="small" id="icsSelTutti" style="margin:0;">Tutti</button>' +
+      '<button class="small" id="icsSelNessuno" style="margin:0;">Nessuno</button>' +
+      '<button class="small" id="icsSelRilevanti" style="margin:0;">Solo campionati/cross</button>' +
+    '</div>' +
+    '<p class="hint" style="margin:0 0 6px;">' + eventi.length + ' gare nel file · ' + rilevanti + ' potenzialmente rilevanti per i salti.</p>' +
+    '<div style="max-height:260px; overflow:auto; border:1px solid var(--bordo); border-radius:10px;">' +
+      '<table style="font-size:12px; margin:0;"><tbody>' +
+      (visibili.length ? visibili.map(x => {
+        const e = x.e;
+        return '<tr><td style="width:24px;"><input type="checkbox" class="ics-sel" data-i="' + x.i + '"' + (icsRilevante(e) ? ' checked' : '') + ' style="width:auto;"></td>' +
+          '<td style="width:74px; white-space:nowrap;">' + esc(e.data) + '</td>' +
+          '<td>' + esc(e.nome) + '</td>' +
+          '<td style="width:110px; color:#7b8794;">' + esc(e.luogo || '') + '</td>' +
+          '<td style="width:90px; color:#7b8794;">' + esc(e.descrizione || '') + '</td></tr>';
+      }).join('') : '<tr><td style="text-align:center; color:#7b8794;">Nessuna gara corrisponde alla ricerca.</td></tr>') +
+      '</tbody></table></div>';
+
+  const campo = document.getElementById('icsCerca');
+  if(campo) campo.oninput = () => anteprimaIcs(eventi, campo.value);
+  const tutti = document.getElementById('icsSelTutti');
+  if(tutti) tutti.onclick = () => selezionaTuttiIcs(true);
+  const nessuno = document.getElementById('icsSelNessuno');
+  if(nessuno) nessuno.onclick = () => selezionaTuttiIcs(false);
+  const soloRilevanti = document.getElementById('icsSelRilevanti');
+  if(soloRilevanti) soloRilevanti.onclick = () => {
+    document.querySelectorAll('.ics-sel').forEach(cb => { cb.checked = icsRilevante(eventi[+cb.dataset.i]); });
+  };
+}
+
+function selezionaTuttiIcs(valore){
+  document.querySelectorAll('.ics-sel').forEach(cb => { cb.checked = !!valore; });
+}
+
+function eventiIcsSelezionati(){
+  const scelti = [];
+  document.querySelectorAll('.ics-sel').forEach(cb => {
+    if(cb.checked && icsEventiCorrenti[+cb.dataset.i]) scelti.push(icsEventiCorrenti[+cb.dataset.i]);
+  });
+  return scelti;
+}
+
+let icsEventiCorrenti = [];
+
+document.getElementById('icsCalendarioFile').onchange = () => {
+  const input = document.getElementById('icsCalendarioFile');
+  if(!input || !input.files || !input.files[0]) return;
+  const lettore = new FileReader();
+  lettore.onload = () => {
+    icsEventiCorrenti = icsEventi(String(lettore.result || ''));
+    anteprimaIcs(icsEventiCorrenti);
+  };
+  lettore.readAsText(input.files[0], 'utf-8');
+};
+
+document.getElementById('btnImportaCalendario').onclick = () => {
+  if(!icsEventiCorrenti.length){ alert('Prima scegli un file .ics e controlla l\'anteprima.'); return; }
+  const scelti = eventiIcsSelezionati();
+  if(!scelti.length){ alert('Seleziona almeno una gara da importare.'); return; }
+  const esito = applicaImportCalendario(scelti);
+  const box = document.getElementById('icsCalendarioAnteprima');
+  if(box) box.innerHTML = '<p class="hint">Importate ' + esito.importati + ' gare' + (esito.duplicati ? ', ' + esito.duplicati + ' già presenti' : '') + '.</p>';
+  icsEventiCorrenti = [];
+};
 
 let csvGareCorrenti = [], csvSeduteCorrenti = [];
 
