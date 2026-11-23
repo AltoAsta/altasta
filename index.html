@@ -318,7 +318,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v63</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v64</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1015,6 +1015,35 @@
 
     <section id="view-dati">
       <div class="card">
+        <h2>📥 Importa da CSV</h2>
+        <p class="hint">Porta dentro gare e sedute senza reinserirle a mano. Le colonne si riconoscono dal nome (Data, Atleta, Disciplina…); l'atleta viene abbinato per cognome e nome.</p>
+
+        <div class="row" style="align-items:flex-start;">
+          <div style="flex:1; min-width:280px; border:1px solid var(--bordo); border-radius:12px; padding:12px;">
+            <h3 style="font-size:13px; margin:0 0 6px;">🏆 Gare e test</h3>
+            <p class="hint" style="margin:0 0 8px;">Colonne: <b>data, atleta</b> (o cognome+nome), <b>disciplina, tipo, misura</b>, note, rincorsa, piede.</p>
+            <input type="file" id="csvGareFile" accept=".csv,text/csv" style="padding:6px;">
+            <div style="display:flex; gap:6px; margin-top:8px;">
+              <button class="small" id="btnModelloGare" style="background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3;">Scarica modello</button>
+              <button class="small primary" id="btnImportaGare" style="margin:0;">Importa gare</button>
+            </div>
+            <div id="csvGareAnteprima" style="margin-top:10px;"></div>
+          </div>
+
+          <div style="flex:1; min-width:280px; border:1px solid var(--bordo); border-radius:12px; padding:12px;">
+            <h3 style="font-size:13px; margin:0 0 6px;">🏃 Sedute svolte</h3>
+            <p class="hint" style="margin:0 0 8px;">Colonne: <b>data, atleta, Tipo</b>, <b>minuti</b>, <b>rpe</b>, note. Una riga = una seduta.</p>
+            <input type="file" id="csvSeduteFile" accept=".csv,text/csv" style="padding:6px;">
+            <div style="display:flex; gap:6px; margin-top:8px;">
+              <button class="small" id="btnModelloSedute" style="background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3;">Scarica modello</button>
+              <button class="small primary" id="btnImportaSedute" style="margin:0;">Importa sedute</button>
+            </div>
+            <div id="csvSeduteAnteprima" style="margin-top:10px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>👤 Profilo allenatore</h2>
         <p class="hint">È il nome che compare in alto e nel saluto della Home.</p>
         <div class="row">
@@ -1623,7 +1652,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '63';
+const VERSIONE = '64';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -6714,6 +6743,295 @@ document.getElementById('btnSalvaNomeCoach').onclick = async () => {
     if(stato) stato.textContent = '';
     alert('Non riesco a salvare il nome: ' + e.message);
   }
+};
+
+/* ===== import CSV ===== */
+function normalizzaTestoCsv(t){
+  return String(t || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim();
+}
+
+function rilevaSeparatore(primaRiga){
+  const puntoevirgola = (primaRiga.match(/;/g) || []).length;
+  const virgola = (primaRiga.match(/,/g) || []).length;
+  const tab = (primaRiga.match(/\t/g) || []).length;
+  if(tab > puntoevirgola && tab > virgola) return '\t';
+  return puntoevirgola >= virgola ? ';' : ',';
+}
+
+function parseCsv(testo){
+  const t = normalizzaTestoCsv(testo);
+  if(!t) return [];
+  const sep = rilevaSeparatore(t.split('\n')[0]);
+  const righe = [];
+  let campo = '', riga = [], traVirgolette = false;
+
+  for(let i = 0; i < t.length; i++){
+    const ch = t[i];
+    if(traVirgolette){
+      if(ch === '"'){
+        if(t[i + 1] === '"'){ campo += '"'; i++; }
+        else traVirgolette = false;
+      } else campo += ch;
+    } else if(ch === '"') traVirgolette = true;
+    else if(ch === sep){ riga.push(campo); campo = ''; }
+    else if(ch === '\n'){ riga.push(campo); righe.push(riga); riga = []; campo = ''; }
+    else campo += ch;
+  }
+  riga.push(campo);
+  righe.push(riga);
+  return righe.filter(r => r.some(c => String(c).trim() !== ''));
+}
+
+function normalizzaIntestazione(h){
+  return String(h || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+
+function trovaColonna(intestazioni, nomi){
+  for(let i = 0; i < intestazioni.length; i++){
+    const n = normalizzaIntestazione(intestazioni[i]);
+    for(let k = 0; k < nomi.length; k++){
+      if(n === normalizzaIntestazione(nomi[k])) return i;
+    }
+  }
+  return -1;
+}
+
+function normNome(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+
+function trovaAtletaPerNome(cognome, nome, completo){
+  const atleti = db.athletes || [];
+  if(completo){
+    const chiave = normNome(completo);
+    return atleti.filter(a => normNome(a.cognome + ' ' + a.nome) === chiave || normNome(a.nome + ' ' + a.cognome) === chiave)[0] || null;
+  }
+  const c = normNome(cognome), n = normNome(nome);
+  if(!c && !n) return null;
+  return atleti.filter(a => normNome(a.cognome) === c && normNome(a.nome) === n)[0] || null;
+}
+
+function normalizzaDataCsv(valore){
+  const v = String(valore || '').trim();
+  if(!v) return '';
+  let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if(m){
+    let anno = m[3];
+    if(anno.length === 2) anno = (parseInt(anno, 10) > 50 ? '19' : '20') + anno;
+    return anno + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+  }
+  return '';
+}
+
+function csvGarePrevisto(testo){
+  const righe = parseCsv(testo);
+  if(righe.length < 2) return { righe: [], errori: ['Il file non contiene righe di dati.'] };
+  const intest = righe[0];
+  const col = {
+    data: trovaColonna(intest, ['data', 'date', 'giorno']),
+    atleta: trovaColonna(intest, ['atleta', 'nome completo', 'athlete']),
+    cognome: trovaColonna(intest, ['cognome', 'surname', 'lastname']),
+    nome: trovaColonna(intest, ['nome', 'name', 'firstname']),
+    disciplina: trovaColonna(intest, ['disciplina', 'specialita', 'gara']),
+    tipo: trovaColonna(intest, ['tipo', 'tipo gara', 'categoria gara']),
+    misura: trovaColonna(intest, ['misura', 'risultato', 'result', 'prestazione']),
+    note: trovaColonna(intest, ['note', 'notes']),
+    rincorsa: trovaColonna(intest, ['rincorsa', 'passi']),
+    piede: trovaColonna(intest, ['piede', 'foot'])
+  };
+
+  const errori = [];
+  if(col.data < 0 && col.data !== 0) errori.push('Manca la colonna Data.');
+  if(col.atleta < 0 && (col.cognome < 0 || col.nome < 0)) errori.push('Manca la colonna Atleta (oppure Cognome e Nome).');
+  if(col.misura < 0) errori.push('Manca la colonna Misura.');
+
+  const previste = [];
+  righe.slice(1).forEach((r, i) => {
+    const data = normalizzaDataCsv(r[col.data]);
+    const completo = col.atleta >= 0 ? r[col.atleta] : '';
+    const cognome = col.cognome >= 0 ? r[col.cognome] : '';
+    const nome = col.nome >= 0 ? r[col.nome] : '';
+    const atleta = trovaAtletaPerNome(cognome, nome, completo);
+    const misura = (r[col.misura] || '').trim();
+    if(!data || !misura) return;
+    previste.push({
+      riga: i + 2,
+      data: data,
+      atletaId: atleta ? atleta.id : null,
+      atletaNome: atleta ? (atleta.cognome + ' ' + atleta.nome) : (completo || (cognome + ' ' + nome)).trim(),
+      disciplina: (r[col.disciplina] || '').trim() || 'Alto',
+      tipo: (r[col.tipo] || '').trim() || 'Gara',
+      misura: misura.replace(',', '.'),
+      note: col.note >= 0 ? (r[col.note] || '').trim() : '',
+      rincorsa: col.rincorsa >= 0 ? (r[col.rincorsa] || '').trim() : '',
+      piede: col.piede >= 0 ? (r[col.piede] || '').trim() : ''
+    });
+  });
+
+  return { righe: previste, errori: errori };
+}
+
+function applicaImportGare(previste){
+  let importate = 0, scartate = 0;
+  previste.forEach(r => {
+    if(!r.atletaId){ scartate++; return; }
+    db.comps.push({
+      id: uid(), atletaId: r.atletaId, data: r.data,
+      disciplina: r.disciplina, tipo: r.tipo, misura: r.misura,
+      prove: [], rincorsa: r.rincorsa, velocita: null,
+      piede: r.piede, tentativi: '', note: r.note
+    });
+    importate++;
+  });
+  if(importate){
+    registraAttivita('Import', 'Importate ' + importate + ' gare da CSV');
+    saveData(); renderAll();
+  }
+  return { importate: importate, scartate: scartate };
+}
+
+function csvSedutePrevisto(testo){
+  const righe = parseCsv(testo);
+  if(righe.length < 2) return { righe: [], errori: ['Il file non contiene righe di dati.'] };
+  const intest = righe[0];
+  const col = {
+    data: trovaColonna(intest, ['data', 'date', 'giorno']),
+    atleta: trovaColonna(intest, ['atleta', 'nome completo', 'athlete']),
+    cognome: trovaColonna(intest, ['cognome', 'surname']),
+    nome: trovaColonna(intest, ['nome', 'name']),
+    tipo: trovaColonna(intest, ['tipo', 'tipo blocco', 'blocco', 'attivita']),
+    minuti: trovaColonna(intest, ['minuti', 'durata', 'duration', 'tempo']),
+    rpe: trovaColonna(intest, ['rpe', 'sforzo', 'percezione']),
+    note: trovaColonna(intest, ['note', 'notes'])
+  };
+
+  const errori = [];
+  if(col.data < 0) errori.push('Manca la colonna Data.');
+  if(col.atleta < 0 && (col.cognome < 0 || col.nome < 0)) errori.push('Manca la colonna Atleta (oppure Cognome e Nome).');
+  if(col.minuti < 0) errori.push('Manca la colonna Minuti.');
+
+  const previste = [];
+  righe.slice(1).forEach((r, i) => {
+    const data = normalizzaDataCsv(r[col.data]);
+    const completo = col.atleta >= 0 ? r[col.atleta] : '';
+    const cognome = col.cognome >= 0 ? r[col.cognome] : '';
+    const nome = col.nome >= 0 ? r[col.nome] : '';
+    const atleta = trovaAtletaPerNome(cognome, nome, completo);
+    const minuti = parseInt(String(r[col.minuti] || '').replace(',', '.'), 10);
+    const rpe = parseInt(r[col.rpe] || '', 10);
+    if(!data || !(minuti > 0)) return;
+    previste.push({
+      riga: i + 2,
+      data: data,
+      atletaId: atleta ? atleta.id : null,
+      atletaNome: atleta ? (atleta.cognome + ' ' + atleta.nome) : (completo || (cognome + ' ' + nome)).trim(),
+      tipo: (r[col.tipo] || '').trim() || tipoBloccoPredefinito(['forza'], 'Forza'),
+      minuti: Math.max(1, Math.min(600, minuti)),
+      rpe: Math.max(1, Math.min(10, rpe || 6)),
+      note: col.note >= 0 ? (r[col.note] || '').trim() : ''
+    });
+  });
+
+  return { righe: previste, errori: errori };
+}
+
+function applicaImportSedute(previste){
+  let importate = 0, scartate = 0;
+  previste.forEach(r => {
+    if(!r.atletaId){ scartate++; return; }
+    db.sessions.push({
+      id: uid(), atletaId: r.atletaId, data: r.data, note: r.note,
+      stato: 'completata',
+      blocchi: [{ tipo: r.tipo, serie: 0, ripetuta: '', durata: r.minuti, rpe: r.rpe, salti: 0, contatti: 0, recupero: '', recuperoFine: '', focus: '' }]
+    });
+    importate++;
+  });
+  if(importate){
+    registraAttivita('Import', 'Importate ' + importate + ' sedute da CSV');
+    saveData(); renderAll();
+  }
+  return { importate: importate, scartate: scartate };
+}
+
+function scaricaCsv(nome, contenuto){
+  const blob = new Blob([contenuto], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nome;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function anteprimaCsv(contenitoreId, risultato, tipo){
+  const box = document.getElementById(contenitoreId);
+  if(!box) return;
+  if(risultato.errori && risultato.errori.length){
+    box.innerHTML = '<p class="hint" style="color:#c0392b;">' + risultato.errori.map(esc).join('<br>') + '</p>';
+    return;
+  }
+  if(!risultato.righe.length){
+    box.innerHTML = '<p class="hint">Nessuna riga valida trovata.</p>';
+    return;
+  }
+  const ok = risultato.righe.filter(r => r.atletaId).length;
+  const prime = risultato.righe.slice(0, 8).map(r =>
+    '<tr><td>' + esc(r.data) + '</td><td>' + esc(r.atletaNome) + (r.atletaId ? '' : ' <span class="pill" style="background:#fdecec; color:#c0392b;">non trovato</span>') + '</td>' +
+    '<td>' + esc(tipo === 'gare' ? r.disciplina : r.tipo) + '</td>' +
+    '<td>' + esc(tipo === 'gare' ? r.misura : (r.minuti + "' RPE " + r.rpe)) + '</td></tr>').join('');
+  box.innerHTML = '<p class="hint" style="margin:0 0 6px;">' + risultato.righe.length + ' righe · ' + ok + ' abbinate a un atleta.</p>' +
+    '<table style="font-size:12px;"><thead><tr><th>Data</th><th>Atleta</th><th>' + (tipo === 'gare' ? 'Disciplina' : 'Tipo') + '</th><th>' + (tipo === 'gare' ? 'Misura' : 'Durata') + '</th></tr></thead><tbody>' + prime + '</tbody></table>';
+}
+
+let csvGareCorrenti = [], csvSeduteCorrenti = [];
+
+function leggiFileCsv(inputId, tipo){
+  const input = document.getElementById(inputId);
+  if(!input || !input.files || !input.files[0]){ alert('Scegli prima un file CSV.'); return; }
+  const lettore = new FileReader();
+  lettore.onload = () => {
+    const testo = String(lettore.result || '');
+    if(tipo === 'gare'){
+      const r = csvGarePrevisto(testo);
+      csvGareCorrenti = r.righe;
+      anteprimaCsv('csvGareAnteprima', r, 'gare');
+    } else {
+      const r = csvSedutePrevisto(testo);
+      csvSeduteCorrenti = r.righe;
+      anteprimaCsv('csvSeduteAnteprima', r, 'sedute');
+    }
+  };
+  lettore.readAsText(input.files[0], 'utf-8');
+}
+
+document.getElementById('csvGareFile').onchange = () => leggiFileCsv('csvGareFile', 'gare');
+document.getElementById('csvSeduteFile').onchange = () => leggiFileCsv('csvSeduteFile', 'sedute');
+
+document.getElementById('btnImportaGare').onclick = () => {
+  if(!csvGareCorrenti.length){ alert('Prima scegli un file e controlla l\'anteprima.'); return; }
+  const esito = applicaImportGare(csvGareCorrenti);
+  anteprimaCsv('csvGareAnteprima', { righe: [], errori: [] }, 'gare');
+  document.getElementById('csvGareAnteprima').innerHTML = '<p class="hint">Importate ' + esito.importate + ' gare' + (esito.scartate ? ', ' + esito.scartate + ' scartate (atleta non trovato)' : '') + '.</p>';
+  csvGareCorrenti = [];
+};
+
+document.getElementById('btnImportaSedute').onclick = () => {
+  if(!csvSeduteCorrenti.length){ alert('Prima scegli un file e controlla l\'anteprima.'); return; }
+  const esito = applicaImportSedute(csvSeduteCorrenti);
+  document.getElementById('csvSeduteAnteprima').innerHTML = '<p class="hint">Importate ' + esito.importate + ' sedute' + (esito.scartate ? ', ' + esito.scartate + ' scartate (atleta non trovato)' : '') + '.</p>';
+  csvSeduteCorrenti = [];
+};
+
+document.getElementById('btnModelloGare').onclick = () => {
+  const esempio = 'Data;Atleta;Disciplina;Tipo;Misura;Note;Rincorsa;Piede\n' +
+    '15/02/2026;Ruggio Francesco;Alto;Gara;1,75;campionati regionali;7;dx\n' +
+    '01/03/2026;Ruggio Martina;Asta;Test;3,50;;9;sx\n';
+  scaricaCsv('modello-gare.csv', esempio);
+};
+
+document.getElementById('btnModelloSedute').onclick = () => {
+  const esempio = 'Data;Atleta;Tipo;Minuti;RPE;Note\n' +
+    '12/11/2026;Ruggio Francesco;Forza;50;7;seduta in palestra\n' +
+    '14/11/2026;Ruggio Martina;Tecnica di salto;60;6;\n';
+  scaricaCsv('modello-sedute.csv', esempio);
 };
 
 function renderDashboard(){
