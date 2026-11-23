@@ -322,7 +322,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v71</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v72</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1390,6 +1390,7 @@ async function doAthleteLogin() {
       isAthleteMode = true;
       cloudAtleta = true;
       credenzialiAtleta = { codice: codice, pin: pin };
+      Cloud.token = null; Cloud.refreshToken = null; Cloud.scadenza = 0;   // niente token da riusare
       localStorage.removeItem(SESSION_KEY);
       saltaLoadData = true;
       err.innerText = '';
@@ -1730,7 +1731,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '71';
+const VERSIONE = '72';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -3192,7 +3193,7 @@ async function cloudCommento(sessioneId, testo){
     p_pin: credenzialiAtleta.pin,
     p_sessione: sessioneId,
     p_testo: testo
-  });
+  }, { noAuth: true });
 }
 
 function pulsanteCommenti(sessioneId){
@@ -6159,8 +6160,10 @@ async function cloudAuthFetch(path, body){
 }
 
 async function cloudRichiesta(metodo, path, body, opzioni){
+  const senzaToken = !!(opzioni && opzioni.noAuth);
   const headers = Object.assign({ 'apikey': cloudKey(), 'Content-Type': 'application/json' }, (opzioni && opzioni.headers) || {});
-  if(Cloud.token) headers['Authorization'] = 'Bearer ' + Cloud.token;
+  if(Cloud.token && !senzaToken) headers['Authorization'] = 'Bearer ' + Cloud.token;
+
   const res = await fetch(cloudBase() + path, {
     method: metodo,
     headers: headers,
@@ -6168,6 +6171,15 @@ async function cloudRichiesta(metodo, path, body, opzioni){
   });
   const testo = await res.text();
   let dati = null; try{ dati = testo ? JSON.parse(testo) : null; }catch(e){ dati = testo; }
+
+  // token scaduto: prova a rinnovarlo una volta e ripete la richiesta
+  if(res.status === 401 && !senzaToken && Cloud.refreshToken && !(opzioni && opzioni.riprovato) && String(testo).indexOf('jwt') !== -1){
+    const rinnovato = await cloudRinnova();
+    if(rinnovato){
+      return cloudRichiesta(metodo, path, body, Object.assign({}, opzioni, { riprovato: true }));
+    }
+  }
+
   if(!res.ok) throw cloudErrore(dati, res.status);
   return dati;
 }
@@ -6441,7 +6453,7 @@ async function cloudEliminaShare(id){
 }
 
 async function cloudAtletaAccesso(codice, pin){
-  return await cloudRichiesta('POST', '/rest/v1/rpc/atleta_accesso', { p_codice: codice, p_pin: pin });
+  return await cloudRichiesta('POST', '/rest/v1/rpc/atleta_accesso', { p_codice: codice, p_pin: pin }, { noAuth: true });
 }
 
 /* --- SQL di setup, mostrato nell'app --- */
@@ -6906,7 +6918,7 @@ async function cloudPropostaGara(gara){
     p_codice: credenzialiAtleta.codice,
     p_pin: credenzialiAtleta.pin,
     p_gara: gara
-  });
+  }, { noAuth: true });
 }
 
 async function cloudSalvaCheckin(ck){
@@ -6915,7 +6927,7 @@ async function cloudSalvaCheckin(ck){
     p_codice: credenzialiAtleta.codice,
     p_pin: credenzialiAtleta.pin,
     p_checkin: ck
-  });
+  }, { noAuth: true });
 }
 
 document.getElementById('btnCheckin').onclick = async () => {
