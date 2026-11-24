@@ -409,7 +409,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v78</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v79</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1389,16 +1389,88 @@ function decodificaAccesso(codice){
   return null;
 }
 
-function creaLinkAccesso(){
+/* ---------- link protetto da PIN (AES-GCM + PBKDF2) ---------- */
+function hexDaBytes(byte){
+  let out = '';
+  for(let i = 0; i < byte.length; i++) out += ('0' + byte[i].toString(16)).slice(-2);
+  return out;
+}
+
+function bytesDaHex(testo){
+  const pulito = String(testo || '');
+  const out = new Uint8Array(Math.floor(pulito.length / 2));
+  for(let i = 0; i < out.length; i++) out[i] = parseInt(pulito.substr(i * 2, 2), 16);
+  return out;
+}
+
+async function chiaveDaPin(pin, salt){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pin)), 'PBKDF2', false, ['deriveKey']);
+  return await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: salt, iterations: 120000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+  );
+}
+
+async function cifraConPin(testo, pin){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const chiave = await chiaveDaPin(pin, salt);
+  const cifrato = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, chiave, new TextEncoder().encode(String(testo)));
+  return hexDaBytes(salt) + hexDaBytes(iv) + hexDaBytes(new Uint8Array(cifrato));
+}
+
+function utf8DaBytes(bytes){
+  let out = '', i = 0;
+  while(i < bytes.length){
+    const b = bytes[i++];
+    if(b < 0x80) out += String.fromCharCode(b);
+    else if(b < 0xE0) out += String.fromCharCode(((b & 0x1F) << 6) | (bytes[i++] & 0x3F));
+    else if(b < 0xF0) out += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F));
+    else {
+      const cp = ((b & 0x07) << 18) | ((bytes[i++] & 0x3F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F);
+      out += String.fromCodePoint(cp);
+    }
+  }
+  return out;
+}
+
+async function decifraConPin(blob, pin){
+  try{
+    const bytes = bytesDaHex(blob);
+    if(bytes.length < 40) return null;
+    const salt = bytes.slice(0, 16);
+    const iv = bytes.slice(16, 28);
+    const cifrato = bytes.slice(28);
+    const chiave = await chiaveDaPin(pin, salt);
+    const chiaro = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, chiave, cifrato);
+    return utf8DaBytes(new Uint8Array(chiaro));
+  }catch(e){
+    return null;
+  }
+}
+
+async function creaLinkAccesso(){
   if(!cloudAttivo()){ alert('Prima configura il cloud con URL e chiave.'); return; }
+  if(!(typeof crypto !== 'undefined' && crypto.subtle)){
+    alert('Il browser non permette la cifratura qui: apri l\'app dal link https.');
+    return;
+  }
   const email = prompt('Email dell\'account allenatore:', localStorage.getItem('altasta_ultima_email') || '');
   if(!email) return;
   const password = prompt('Password di quell\'account:');
   if(!password) return;
-  if(!confirm('Attenzione: chi apre questo link entra nel tuo archivio senza digitare nulla.\n\nUsalo solo per il tuo telefono, non condividerlo. Continuo?')) return;
-  const link = String(location.origin + location.pathname) + '?config=' + codificaConfigCloud() + '&login=' + codificaAccesso(email, password);
+  const pin = prompt('Scegli un PIN di 4-6 cifre (servirà per aprire il link):');
+  if(!pin || !/^[0-9]{4,6}$/.test(pin)){ alert('Il PIN deve avere da 4 a 6 cifre.'); return; }
+  const pin2 = prompt('Ripeti il PIN:');
+  if(pin2 !== pin){ alert('I due PIN non coincidono.'); return; }
+  if(!confirm('Il link conterrà la password cifrata con il tuo PIN.\n\nSenza il PIN il link non serve a nulla. Conserva il PIN separato dal link. Continuo?')) return;
+
+  const cifrato = await cifraConPin(email + '|' + password, pin);
+  if(!cifrato){ alert('Non riesco a cifrare le credenziali.'); return; }
+
+  const link = String(location.origin + location.pathname) + '?config=' + codificaConfigCloud() + '&login=' + encodeURIComponent(email) + '&pin=' + cifrato;
   localStorage.setItem('altasta_ultima_email', email);
-  const fatto = () => alert('Link creato e copiato. Salvalo tra i preferiti del telefono: apre l\'app già dentro, senza digitare nulla.');
+  const fatto = () => alert('Link creato e copiato. Al primo uso ti chiederà il PIN: senza quello il link non apre nulla.');
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(fatto).catch(() => prompt('Copia questo link:', link));
   else prompt('Copia questo link:', link);
 }
@@ -1406,13 +1478,28 @@ function creaLinkAccesso(){
 async function provaAccessoDaLink(){
   try{
     const ricerca = String(location.search || '');
-    const posizione = ricerca.indexOf('login=');
-    if(posizione === -1) return false;
-    const codice = ricerca.slice(posizione + 6).split('&')[0];
-    const cred = decodificaAccesso(codice);
-    if(!cred || !cloudAttivo()) return false;
+    const posLogin = ricerca.indexOf('login=');
+    const posPin = ricerca.indexOf('pin=');
+    if(posLogin === -1 || posPin === -1) return false;
+
+    const email = decodeURIComponent(ricerca.slice(posLogin + 6).split('&')[0]);
+    const blob = ricerca.slice(posPin + 4).split('&')[0];
+    if(!cloudAttivo()) return false;
+
+    const pin = prompt('PIN di accesso per ' + email + ':');
+    if(!pin) return false;
+
+    const chiaro = await decifraConPin(blob, String(pin).trim());
+    if(!chiaro){
+      const errPin = document.getElementById('loginError');
+      if(errPin) errPin.innerText = 'PIN errato: il link non si apre. Riprova o usa email e password.';
+      return false;
+    }
+
+    const pezzi = chiaro.split('|');
+    const password = pezzi.slice(1).join('|');
     saltaLoadData = true;
-    await accediAlCloud(cred.email, cred.password);
+    await accediAlCloud(pezzi[0] || email, password);
     try{ history.replaceState(null, '', location.pathname); }catch(e){}
     return true;
   }catch(e){
@@ -1910,7 +1997,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '78';
+const VERSIONE = '79';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
