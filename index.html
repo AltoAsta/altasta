@@ -27,7 +27,10 @@
   section{display:none}
   section.on{display:block}
 
-  #authScreen {position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0d3b66 0%, #1d2733 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; overflow-y: auto; padding: 20px 0;}
+  #authScreen {position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #0d3b66 0%, #1d2733 100%); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; z-index: 9999; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 18px 12px 60px;}
+  #authScreen .auth-box{margin: auto; flex: 0 0 auto;}
+  #authScreen .link{display:inline-block; padding:10px 12px; border-radius:8px; background:rgba(13,59,102,.06); cursor:pointer;}
+  #authScreen .link:hover{background:rgba(13,59,102,.12);}
   .auth-box {background: #fff; padding: 30px; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;}
   .auth-logo { font-size: 40px; margin-bottom: 10px; }
   .auth-box h2 { margin: 0 0 20px 0; color: #0d3b66; font-size: 22px; }
@@ -379,6 +382,8 @@
         <div class="form-group"><label>Chiave pubblica (anon)</label><input id="cloudKey" placeholder="eyJhbGciOi... oppure sb_publishable_..."></div>
         <p class="hint" style="margin-top:-4px;">La trovi in Supabase: <b>Project Settings → API</b> (o <b>API Keys</b>). Copia la chiave <b>anon / public</b>; se vedi solo le chiavi nuove, apri <b>Legacy API keys</b>. <b>Mai</b> la <code>service_role</code> / <code>secret</code>: è come dare la password dell'archivio a chiunque apra l'app.</p>
         <button class="btn-action" id="btnCloudSalva" style="font-size:14px; padding:9px;">Salva configurazione</button>
+        <button class="btn-action" id="btnCloudAccesso" style="font-size:12px; padding:7px; background:#fff3cd; color:#856404; margin-top:6px;">🔑 Crea link di accesso automatico</button>
+        <button class="btn-action" id="btnCloudLink" style="font-size:12px; padding:7px; background:#e7f0fa; color:#0d3b66; margin-top:6px;">🔗 Copia link di configurazione</button>
         <button class="btn-action" id="btnCloudReset" style="font-size:12px; padding:7px; background:#e3e9f0; color:#52606d; margin-top:6px;">Rimuovi cloud</button>
         <p class="hint" id="cloudLoginNota"></p>
         <ol class="hint" style="padding-left:18px; margin-top:4px;">
@@ -404,12 +409,12 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v75</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v78</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
       <button id="btnMessaggi" title="Messaggi sulle sedute" style="position:relative; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:8px; padding:5px 9px; cursor:pointer;">💬<span id="msgCount" style="display:none; position:absolute; top:-6px; right:-6px; background:#e76f51; color:#fff; border-radius:999px; font-size:10px; font-weight:700; padding:1px 5px;">0</span></button>
-      <span id="syncStato" title="Stato del salvataggio" style="font-size:12px; opacity:.95;">💾 Locale</span>
+      <span id="syncStato" title="Stato del salvataggio" style="font-size:12px; opacity:.95; cursor:pointer;">💾 Locale</span>
       <button id="btnSyncRiprova" style="display:none;">Riprova</button>
       <button onclick="doLogout()">Logout</button>
     </div>
@@ -428,6 +433,21 @@
     <button class="tab" data-view="stats">Statistiche</button>
     <button class="tab" data-view="dati">Dati</button>
   </nav>
+
+  <div id="modalCloud" style="display:none; position:fixed; inset:0; background:rgba(10,20,30,.55); z-index:9995; align-items:center; justify-content:center; padding:16px;">
+    <div class="modal-scuro" style="background:var(--superficie); border-radius:14px; padding:18px; max-width:520px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,.25); max-height:88vh; overflow:auto;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+        <h2 style="margin:0; font-size:16px;">☁️ Cloud</h2>
+        <button class="del" id="btnChiudiCloud" style="margin:0;">✕</button>
+      </div>
+      <div id="cloudInfoContenuto" style="margin-top:10px; font-size:13px;"></div>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:14px;">
+        <button class="primary" id="btnCloudLink2" style="margin:0;">🔗 Copia link di configurazione</button>
+        <button class="small" id="btnCloudAccesso2" style="background:#fff3cd; color:#856404; border:1px solid #f0d58c; padding:9px;">🔑 Crea link di accesso automatico</button>
+        <button class="small" id="btnCloudVaiConfig" style="background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; padding:9px;">⚙️ Vai alla configurazione</button>
+      </div>
+    </div>
+  </div>
 
   <div id="modalCommenti" style="display:none; position:fixed; inset:0; background:rgba(10,20,30,.55); z-index:9997; align-items:center; justify-content:center; padding:16px;">
     <div class="modal-scuro" style="background:var(--superficie); border-radius:14px; padding:18px; max-width:560px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,.25); max-height:88vh; display:flex; flex-direction:column;">
@@ -1340,6 +1360,68 @@ async function doRegister() {
   enterApp();
 }
 
+async function accediAlCloud(email, password){
+  await cloudAccedi(email, password);
+  const profilo = await cloudProfilo(email.split('@')[0]);
+  Cloud.nome = (profilo && profilo.nome) || email.split('@')[0];
+  await cloudClubInfo();
+  currentUserId = Cloud.coachId;
+  isAthleteMode = false;
+  currentAthleteId = null;
+  db = normalizzaDati(await cloudCaricaDati());
+  await cloudCaricaShares();
+  await cloudCaricaCoaches();
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ coachId: currentUserId, cloud: true, nome: email }));
+  saltaLoadData = true;
+  enterApp();
+}
+
+function codificaAccesso(email, password){
+  try{ return encodeURIComponent(email + '|' + password); }catch(e){ return ''; }
+}
+
+function decodificaAccesso(codice){
+  try{
+    const testo = decodeURIComponent(String(codice || ''));
+    const pezzi = testo.split('|');
+    if(pezzi.length >= 2 && pezzi[0].indexOf('@') > 0 && pezzi[1]) return { email: pezzi[0], password: pezzi.slice(1).join('|') };
+  }catch(e){}
+  return null;
+}
+
+function creaLinkAccesso(){
+  if(!cloudAttivo()){ alert('Prima configura il cloud con URL e chiave.'); return; }
+  const email = prompt('Email dell\'account allenatore:', localStorage.getItem('altasta_ultima_email') || '');
+  if(!email) return;
+  const password = prompt('Password di quell\'account:');
+  if(!password) return;
+  if(!confirm('Attenzione: chi apre questo link entra nel tuo archivio senza digitare nulla.\n\nUsalo solo per il tuo telefono, non condividerlo. Continuo?')) return;
+  const link = String(location.origin + location.pathname) + '?config=' + codificaConfigCloud() + '&login=' + codificaAccesso(email, password);
+  localStorage.setItem('altasta_ultima_email', email);
+  const fatto = () => alert('Link creato e copiato. Salvalo tra i preferiti del telefono: apre l\'app già dentro, senza digitare nulla.');
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(fatto).catch(() => prompt('Copia questo link:', link));
+  else prompt('Copia questo link:', link);
+}
+
+async function provaAccessoDaLink(){
+  try{
+    const ricerca = String(location.search || '');
+    const posizione = ricerca.indexOf('login=');
+    if(posizione === -1) return false;
+    const codice = ricerca.slice(posizione + 6).split('&')[0];
+    const cred = decodificaAccesso(codice);
+    if(!cred || !cloudAttivo()) return false;
+    saltaLoadData = true;
+    await accediAlCloud(cred.email, cred.password);
+    try{ history.replaceState(null, '', location.pathname); }catch(e){}
+    return true;
+  }catch(e){
+    const err = document.getElementById('loginError');
+    if(err) err.innerText = 'Accesso dal link non riuscito: ' + messaggioCloud(e.message);
+    return false;
+  }
+}
+
 async function doLogin() {
   const user = document.getElementById('loginUser').value.trim();
   const pass = document.getElementById('loginPass').value.trim();
@@ -1349,19 +1431,8 @@ async function doLogin() {
     if(!user || !pass){ err.innerText = 'Inserisci email e password.'; return; }
     err.innerText = 'Accesso al cloud…';
     try{
-      await cloudAccedi(user, pass);
-      const profiloAccesso = await cloudProfilo(user.split('@')[0]);
-      Cloud.nome = (profiloAccesso && profiloAccesso.nome) || user.split('@')[0];
-      await cloudClubInfo();
-      currentUserId = Cloud.coachId;
-      isAthleteMode = false; currentAthleteId = null;
-      db = normalizzaDati(await cloudCaricaDati());
-      await cloudCaricaShares();
-      await cloudCaricaCoaches();
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ coachId: currentUserId, cloud: true, nome: user }));
-      saltaLoadData = true;
+      await accediAlCloud(user, pass);
       err.innerText = '';
-      enterApp();
     }catch(e){
       err.innerText = 'Accesso non riuscito: ' + messaggioCloud(e.message);
     }
@@ -1681,6 +1752,32 @@ function registraServiceWorker(){
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+function apriModalCloud(){
+  const modal = document.getElementById('modalCloud');
+  const box = document.getElementById('cloudInfoContenuto');
+  if(!modal || !box) return;
+  const cfg = cloudCfg();
+  const riga = (l, v) => '<div style="display:flex; justify-content:space-between; gap:10px; padding:4px 0; border-bottom:1px solid var(--bordo-2);"><span style="color:#7b8794;">' + l + '</span><b style="text-align:right;">' + v + '</b></div>';
+  box.innerHTML =
+    riga('Progetto', cfg.url ? esc(String(cfg.url).replace('https://', '')) : 'non configurato') +
+    riga('Chiave', cfg.key ? 'inserita' : 'assente') +
+    riga('Archiviazione', cfg.tabelle ? 'tabelle normalizzate' : 'documento JSON') +
+    riga('Sessione', Cloud.coachId ? 'attiva' : 'assente') +
+    riga('Sincronizzazione', esc((document.getElementById('syncStato') || {}).textContent || '—')) +
+    (cloudAttivo() ? '' : '<p class="hint" style="margin-top:10px;">Senza configurazione l\'app salva solo su questo dispositivo.</p>');
+  modal.style.display = 'flex';
+}
+
+function chiudiModalCloud(){
+  const modal = document.getElementById('modalCloud');
+  if(modal) modal.style.display = 'none';
+}
+
+function vaiAllaConfigurazioneCloud(){
+  try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+  if(typeof location !== 'undefined' && location.assign) location.assign(location.pathname + '?cloud=1');
+}
+
 function enterApp() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('mainApp').style.display = 'block';
@@ -1813,7 +1910,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '75';
+const VERSIONE = '78';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -6293,6 +6390,58 @@ async function cloudAuthFetch(path, body){
   return dati;
 }
 
+/* configurazione cloud trasferibile con un link:
+   serve a ripristinarla su un altro telefono senza riscriverla */
+function codificaConfigCloud(){
+  const c = cloudCfg();
+  if(!c.url || !c.key) return '';
+  try{
+    return encodeURIComponent(c.url + '|' + c.key + '|' + (c.tabelle ? '1' : '0'));
+  }catch(e){ return ''; }
+}
+
+function decodificaConfigCloud(codice){
+  try{
+    const testo = decodeURIComponent(String(codice || ''));
+    const pezzi = testo.split('|');
+    if(pezzi.length >= 2 && pezzi[0] && pezzi[1]){
+      return { url: pezzi[0], key: pezzi[1], tabelle: pezzi[2] === '1' };
+    }
+  }catch(e){}
+  return null;
+}
+
+function linkConfigurazione(){
+  const codice = codificaConfigCloud();
+  if(!codice) return '';
+  return String(location.origin + location.pathname) + '?config=' + codice;
+}
+
+function ripristinaConfigDaLink(){
+  try{
+    const ricerca = String(location.search || '');
+    if(ricerca.indexOf('config=') === -1) return false;
+    const codice = ricerca.split('config=')[1].split('&')[0];
+    const cfg = decodificaConfigCloud(codice);
+    if(!cfg) return false;
+    setCloudCfg(cfg);
+    try{ history.replaceState(null, '', location.pathname); }catch(e){}
+    if(document.getElementById('cloudUrl')) aggiornaPannelloCloud();
+    return true;
+  }catch(e){ return false; }
+}
+
+function copiaLinkConfigurazione(){
+  const link = linkConfigurazione();
+  if(!link){ alert('Prima salva URL e chiave del progetto.'); return; }
+  const fatto = () => alert('Link copiato. Salvalo tra i preferiti del telefono: riapre l\'app con la configurazione già inserita.');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(fatto).catch(() => prompt('Copia questo link:', link));
+  } else {
+    prompt('Copia questo link:', link);
+  }
+}
+
 async function cloudRichiesta(metodo, path, body, opzioni){
   const senzaToken = !!(opzioni && opzioni.noAuth);
   const headers = Object.assign({ 'apikey': cloudKey(), 'Content-Type': 'application/json' }, (opzioni && opzioni.headers) || {});
@@ -8358,6 +8507,20 @@ if(typeof location !== 'undefined' && String(location.search || '').indexOf('pul
 document.getElementById('btnTema').onclick = cambiaTema;
 document.getElementById('btnPromemoria').onclick = scaricaPromemoria;
 applicaTema(); applicaIconeTab(); aggiornaBarraRete(); registraServiceWorker();
+ripristinaConfigDaLink();
+document.getElementById('btnCloudLink').onclick = copiaLinkConfigurazione;
+document.getElementById('btnCloudAccesso').onclick = creaLinkAccesso;
+document.getElementById('btnChiudiCloud').onclick = chiudiModalCloud;
+document.getElementById('btnCloudLink2').onclick = copiaLinkConfigurazione;
+document.getElementById('btnCloudAccesso2').onclick = creaLinkAccesso;
+document.getElementById('btnCloudVaiConfig').onclick = vaiAllaConfigurazioneCloud;
+document.getElementById('syncStato').onclick = apriModalCloud;
+provaAccessoDaLink();
+
+// ?cloud=1 apre direttamente il pannello di configurazione
+if(typeof location !== 'undefined' && String(location.search || '').indexOf('cloud=1') !== -1){
+  setTimeout(() => { const p = document.getElementById('cloudPanel'); if(p){ p.style.display = 'block'; aggiornaPannelloCloud(); } }, 150);
+}
 if(typeof window !== 'undefined' && window.addEventListener){
   window.addEventListener('online', () => { aggiornaBarraRete(); inviaCodaCheckin(); aggiornaDatiAtleta(true); });
   window.addEventListener('offline', aggiornaBarraRete);
