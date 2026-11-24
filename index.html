@@ -297,6 +297,10 @@
 </style>
 </head>
 <body>
+<div id="barraErrore" style="display:none; background:#c0392b; color:#fff; font-size:12.5px; font-weight:600; padding:8px 12px; z-index:99999; position:relative;">
+  <span id="barraErroreTesto"></span>
+  <button onclick="this.parentElement.style.display='none'" style="float:right; background:rgba(255,255,255,.2); color:#fff; border:none; border-radius:6px; padding:2px 8px; cursor:pointer;">✕</button>
+</div>
 <div id="barraOffline" style="display:none; background:#f4a261; color:#3a2205; text-align:center; font-size:13px; font-weight:700; padding:7px 10px;">📴 Offline — i dati restano sul dispositivo e si sincronizzano quando torna la rete.</div>
 
 <div id="authScreen">
@@ -400,7 +404,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v74</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v75</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1809,7 +1813,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '74';
+const VERSIONE = '75';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
@@ -4399,14 +4403,55 @@ async function cancellaDatiCloud(){
 
 document.getElementById('btnCancellaCloud').onclick = cancellaDatiCloud;
 
+function segnalaErrore(messaggio){
+  try{
+    const barra = document.getElementById('barraErrore');
+    const testo = document.getElementById('barraErroreTesto');
+    if(testo) testo.textContent = 'Problema: ' + messaggio;
+    if(barra) barra.style.display = 'block';
+    console.error('[ALTO & ASTA]', messaggio);
+  }catch(e){}
+}
+
+function eseguiSicuro(nome, fn){
+  try{ fn(); }
+  catch(e){ segnalaErrore(nome + ' — ' + (e && e.message ? e.message : e)); }
+}
+
 function renderAll(){
-  renderHome(true); renderAtleti(); renderModelli(); renderBackupSlots();
-  ['sAtleta','gAtleta','tAtleta','filtroSeduta','filtroTest','stAtleta','filtroAssegnati','anaAtleta','filtroGare','calAtleta'].forEach(id=>fillSingleSelect(document.getElementById(id),true));
-  fillMultiSelect(document.getElementById('assignAtleti'), true); fillModelSelect(document.getElementById('assignModelSelect'));
-  renderAssigned(); renderSedute(); renderGare(); renderTests(); renderStats(); renderAnalisiAltezze();
-  renderStorico(); renderAnalisi(); renderCondivisioni(); renderClub();
-  renderCalendario(); renderPeriodizzazione(); renderAudit(); renderCalendarioAtleta(); renderEserciziCustomUI(); renderCheckinSquadra(); renderDashboard(); aggiornaBadgeMessaggi(); renderStatoSistema(); renderSnapshot();
-  applicaVistaAtleta();
+  eseguiSicuro('home', () => renderHome(true));
+  eseguiSicuro('atleti', () => renderAtleti());
+  eseguiSicuro('modelli', () => renderModelli());
+  eseguiSicuro('backup', () => renderBackupSlots());
+  eseguiSicuro('selettori', () => {
+    ['sAtleta','gAtleta','tAtleta','filtroSeduta','filtroTest','stAtleta','filtroAssegnati','anaAtleta','filtroGare','calAtleta'].forEach(id=>fillSingleSelect(document.getElementById(id),true));
+    fillMultiSelect(document.getElementById('assignAtleti'), true); fillModelSelect(document.getElementById('assignModelSelect'));
+  });
+  eseguiSicuro('assegnati', () => renderAssigned());
+  eseguiSicuro('sedute', () => renderSedute());
+  eseguiSicuro('gare', () => renderGare());
+  eseguiSicuro('test', () => renderTests());
+  eseguiSicuro('statistiche', () => renderStats());
+  eseguiSicuro('altezze', () => renderAnalisiAltezze());
+  eseguiSicuro('storico', () => renderStorico());
+  eseguiSicuro('analisi', () => renderAnalisi());
+  eseguiSicuro('condivisioni', () => renderCondivisioni());
+  eseguiSicuro('club', () => renderClub());
+  eseguiSicuro('calendario', () => renderCalendario());
+  eseguiSicuro('periodizzazione', () => renderPeriodizzazione());
+  eseguiSicuro('registro', () => renderAudit());
+  eseguiSicuro('calendario atleta', () => renderCalendarioAtleta());
+  eseguiSicuro('esercizi', () => renderEserciziCustomUI());
+  eseguiSicuro('check-in squadra', () => renderCheckinSquadra());
+  eseguiSicuro('dashboard', () => renderDashboard());
+  eseguiSicuro('messaggi', () => aggiornaBadgeMessaggi());
+  eseguiSicuro('stato sistema', () => renderStatoSistema());
+  eseguiSicuro('istantanee', () => renderSnapshot());
+  eseguiSicuro('vista atleta', () => applicaVistaAtleta());
+}
+
+function etichetteTabellePrincipaliSicure(){
+  eseguiSicuro('etichette tabelle', () => etichetteTabellePrincipali());
 }
 
 function renderHome(keep) {
@@ -8286,6 +8331,29 @@ document.getElementById('assignDataSingola').value=oggiISO(); document.getElemen
 const badgeVersione = document.getElementById('appVersione');
 if(badgeVersione) badgeVersione.textContent = 'v' + VERSIONE;
 document.title = 'ALTO & ASTA Manager v' + VERSIONE;
+
+window.addEventListener('error', e => {
+  segnalaErrore((e && e.message) ? e.message : 'errore di caricamento');
+});
+window.addEventListener('unhandledrejection', e => {
+  const m = e && e.reason && (e.reason.message || e.reason);
+  segnalaErrore('operazione non riuscita: ' + m);
+});
+
+// emergenza: apri l'app con ?pulizia=1 per svuotare cache e service worker
+if(typeof location !== 'undefined' && String(location.search || '').indexOf('pulizia') !== -1){
+  (async () => {
+    try{
+      if(typeof caches !== 'undefined'){ const nomi = await caches.keys(); await Promise.all(nomi.map(n => caches.delete(n))); }
+      if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+        const reg = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(reg.map(r => r.unregister()));
+      }
+    }catch(e){}
+    document.body.innerHTML = '<div style="font-family:system-ui;padding:30px;text-align:center;"><h2>Cache svuotata</h2><p>Riapro l\'app…</p></div>';
+    setTimeout(() => { location.href = location.pathname; }, 600);
+  })();
+}
 
 document.getElementById('btnTema').onclick = cambiaTema;
 document.getElementById('btnPromemoria').onclick = scaricaPromemoria;
