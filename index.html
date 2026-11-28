@@ -135,7 +135,7 @@
     --ombra-1:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.04);
     --ombra-2:0 6px 18px rgba(16,24,40,.08), 0 2px 6px rgba(16,24,40,.04);
   }
-  html{-webkit-text-size-adjust:100%}
+  html{-webkit-text-size-adjust:100%; overscroll-behavior-y: contain}
   body{background:linear-gradient(180deg,#eef3f9 0,#f6f8fb 260px,#f6f8fb 100%);color:var(--testo);-webkit-font-smoothing:antialiased}
   header{background:linear-gradient(135deg,#0d3b66,#17558f);box-shadow:0 2px 12px rgba(13,59,102,.22);padding:12px 22px;position:sticky;top:0;z-index:60}
   header h1{font-size:17px;font-weight:700;letter-spacing:.2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -409,7 +409,7 @@
   </div>
 
   <header>
-    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v79</span></h1>
+    <h1>🏅 ALTO & ASTA Manager — Gestione Allenamenti <span id="appVersione" style="font-size:11px; font-weight:700; background:#e7f0fa; color:#0d3b66; border:1px solid #cfd8e3; border-radius:10px; padding:2px 8px; vertical-align:middle;">v80</span></h1>
     <div class="user-info">
       <span id="userInfoSpan">👤 <b id="coachNameDisplay"></b></span>
       <button id="btnTema" title="Cambia tema chiaro/scuro">🌙</button>
@@ -1297,6 +1297,28 @@ async function checkAuth() {
       }
     } catch(e) {}
   }
+  // l'atleta non ha un account: si ricorda codice e PIN su questo dispositivo,
+  // così una ricarica della pagina non lo riporta al login
+  try{
+    const salvata = JSON.parse(localStorage.getItem('altasta_sessione_atleta') || 'null');
+    if(salvata && salvata.codice && salvata.pin && cloudAttivo() && !cloudAtleta){
+      const dati = await cloudAtletaAccesso(salvata.codice, salvata.pin);
+      if(dati && dati.atleta){
+        db = dbDaAccessoAtleta(dati);
+        currentUserId = dati.coach_id;
+        currentAthleteId = dati.atleta.id;
+        isAthleteMode = true;
+        cloudAtleta = true;
+        credenzialiAtleta = { codice: salvata.codice, pin: salvata.pin };
+        Cloud.token = null; Cloud.refreshToken = null; Cloud.scadenza = 0;
+        saltaLoadData = true;
+        enterApp();
+        return;
+      }
+      localStorage.removeItem('altasta_sessione_atleta');
+    }
+  }catch(e){}
+
   showAuthView('roleSelection');
 }
 
@@ -1372,6 +1394,7 @@ async function accediAlCloud(email, password){
   await cloudCaricaShares();
   await cloudCaricaCoaches();
   localStorage.setItem(SESSION_KEY, JSON.stringify({ coachId: currentUserId, cloud: true, nome: email }));
+  try{ localStorage.removeItem('altasta_sessione_atleta'); }catch(e){}
   saltaLoadData = true;
   enterApp();
 }
@@ -1631,6 +1654,7 @@ async function doAthleteLogin() {
       cloudAtleta = true;
       credenzialiAtleta = { codice: codice, pin: pin };
       Cloud.token = null; Cloud.refreshToken = null; Cloud.scadenza = 0;   // niente token da riusare
+      try{ localStorage.setItem('altasta_sessione_atleta', JSON.stringify({ codice: codice, pin: pin })); }catch(e){}
       localStorage.removeItem(SESSION_KEY);
       saltaLoadData = true;
       err.innerText = '';
@@ -1670,6 +1694,7 @@ async function doAthleteLogin() {
 
 async function doLogout() {
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem('altasta_sessione_atleta');
   if(cloudAttivo()) await cloudEsci();
   currentUserId = null; currentAthleteId = null; isAthleteMode = false; cloudAtleta = false;
   location.reload();
@@ -1997,7 +2022,7 @@ function loadData(){
   }catch(e){ console.warn(e); db = normalizzaDati(null); }
 }
 
-const VERSIONE = '79';
+const VERSIONE = '80';
 
 const TIPI_STANDARD = ['Riscaldamento', 'Mobilità', 'Velocità', 'Rincorsa', 'Tecnica di salto', 'Pliometria', 'Forza', 'Gara / Test', 'Recupero', 'Ostacoli', 'Reattività', 'Propriocezione', 'Tempo di Reazione'];
 
